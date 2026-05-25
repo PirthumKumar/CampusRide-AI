@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="/static/css/styles.css?v=1.3"/>
+    <link rel="stylesheet" href="/static/css/styles.css?v=1.5"/>
 </head>
 <body>
 
@@ -27,10 +27,15 @@
         <!-- Sidebar Navigation (Hidden for guests) -->
         <aside class="app-sidebar" id="sidebarNode" style="display: none;">
             <div class="logo-container">
-                <div class="logo-icon">
-                    <i class="ri-car-fill"></i>
+                <div class="logo-wrapper">
+                    <div class="logo-icon">
+                        <i class="ri-car-fill"></i>
+                    </div>
+                    <div class="logo-text">CampusRide</div>
                 </div>
-                <div class="logo-text">CampusRide</div>
+                <button class="mobile-nav-toggle" id="mobileNavToggleBtn" aria-label="Toggle Navigation">
+                    <i class="ri-menu-line"></i>
+                </button>
             </div>
             
             <nav style="flex: 1;">
@@ -320,7 +325,11 @@
                                         <label class="form-label">Pickup Campus/Location Name</label>
                                         <input type="text" class="form-input" id="createPickupName" placeholder="e.g. Stanford Union Bookstore" required/>
                                     </div>
-                                    <div class="form-row">
+                                    <div class="form-group" style="margin-top: 10px;">
+                                        <label class="form-label">Pickup Address Details (e.g. Near KFC, Building 4B)</label>
+                                        <input type="text" class="form-input" id="createPickupAddressDetails" placeholder="Near KFC, specific building, room, etc."/>
+                                    </div>
+                                    <div class="form-row" style="margin-top: 10px;">
                                         <div class="form-group">
                                             <label class="form-label">Pickup Latitude</label>
                                             <input type="number" step="any" class="form-input" id="createPickupLat" placeholder="37.427" required/>
@@ -336,7 +345,11 @@
                                         <label class="form-label">Dropoff Campus/Location Name</label>
                                         <input type="text" class="form-input" id="createDropoffName" placeholder="e.g. San Jose Student Housing" required/>
                                     </div>
-                                    <div class="form-row">
+                                    <div class="form-group" style="margin-top: 10px;">
+                                        <label class="form-label">Dropoff Address Details (e.g. Near KFC, Building 4B)</label>
+                                        <input type="text" class="form-input" id="createDropoffAddressDetails" placeholder="Near KFC, specific building, room, etc."/>
+                                    </div>
+                                    <div class="form-row" style="margin-top: 10px;">
                                         <div class="form-group">
                                             <label class="form-label">Dropoff Latitude</label>
                                             <input type="number" step="any" class="form-input" id="createDropoffLat" placeholder="37.338" required/>
@@ -411,7 +424,14 @@
 
                         <!-- Step 2 Layout -->
                         <div id="createStep2Form" style="display: none;">
-                            <div class="grid-cols-2" style="margin-bottom: 20px;">
+                            <div class="grid-cols-3" style="margin-bottom: 20px;">
+                                <div class="form-group">
+                                    <label class="form-label">Vehicle Type</label>
+                                    <select class="form-input" id="createVehicleType">
+                                        <option value="car">Car</option>
+                                        <option value="motorbike">Motorbike</option>
+                                    </select>
+                                </div>
                                 <div class="form-group">
                                     <label class="form-label">Vehicle Model / Description</label>
                                     <input type="text" class="form-input" id="createVehicleModel" placeholder="e.g. Tesla Model 3 (White) or Civic Hybrid" required/>
@@ -646,8 +666,11 @@
                         </div>
 
                         <div style="font-size: 12px; line-height: 1.6; margin-bottom: 16px; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                            <div><b>Vehicle Type:</b> <span id="modalVehicleType">Car</span></div>
                             <div><b>Vehicle details:</b> <span id="modalVehicleText">Tesla</span></div>
                             <div id="modalVehiclePlateNode" style="display: none;"><b>Plate details:</b> <span id="modalVehiclePlateText">XXX</span></div>
+                            <div id="modalPickupDetailsNode" style="display: none; margin-top: 8px;"><b>Pickup Address Details:</b> <span id="modalPickupDetailsText"></span></div>
+                            <div id="modalDropoffDetailsNode" style="display: none;"><b>Dropoff Address Details:</b> <span id="modalDropoffDetailsText"></span></div>
                             <div style="margin-top: 8px;"><b>Driver Carpool Notes:</b></div>
                             <p id="modalNotesText" style="color: var(--text-muted); font-style: italic; margin-top: 4px;">None.</p>
                         </div>
@@ -866,9 +889,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <!-- App Scripts -->
-    <script src="/static/js/api.js?v=1.3"></script>
-    <script src="/static/js/map.js?v=1.3"></script>
-    <script src="/static/js/app.js?v=1.3"></script>
+    <script src="/static/js/api.js?v=1.5"></script>
+    <script src="/static/js/map.js?v=1.5"></script>
+    <script src="/static/js/app.js?v=1.5"></script>
 
 </body>
 </html>

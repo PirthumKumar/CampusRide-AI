@@ -80,6 +80,19 @@ class PricingTests(TestCase):
         # Price with override (25km) should be significantly higher than standard (~1.5km)
         self.assertTrue(pred_override['recommended_price'] > pred_normal['recommended_price'])
 
+    def test_motorbike_pricing(self):
+        # 10 km route on weekday off-peak, Motorbike
+        pred = get_price_prediction(
+            pickup_lat=40.7128, pickup_lng=-74.0060,
+            dropoff_lat=40.7829, dropoff_lng=-73.9654,
+            ride_time_str="12:00", ride_date_str="2026-05-20",
+            vehicle_model="Honda CG 125 Motorbike", seats_total=1,
+            vehicle_type='motorbike'
+        )
+        self.assertTrue(pred['recommended_price'] > 50)
+        self.assertEqual(pred['seat_factor'], 1.0)
+        self.assertEqual(pred['vehicle_multiplier'], 1.0)
+
 
 
 class MatchingTests(TestCase):
@@ -277,6 +290,24 @@ class RBACTests(TestCase):
         self.assertEqual(response_history.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response_history.data), 1)
         self.assertEqual(response_history.data[0]["content"], "Hi there, is the ride still active?")
+
+    def test_create_motorbike_ride_with_address_details(self):
+        self.client.force_authenticate(user=self.driver_verified)
+        payload = {
+            "pickup_name": "NUST Campus Gate 1",
+            "pickup_address_details": "Near KFC kiosk",
+            "pickup_lat": 33.6428, "pickup_lng": 72.9904,
+            "dropoff_name": "Faisal Mosque Parking",
+            "dropoff_address_details": "Beside administrative block",
+            "dropoff_lat": 33.7297, "dropoff_lng": 73.0372,
+            "date": "2026-06-01", "time": "08:00:00", "seats_total": 1, "price_per_seat": 100.0,
+            "vehicle_model": "Honda CD 70", "vehicle_plate": "LED-1234", "vehicle_type": "motorbike"
+        }
+        response = self.client.post("/api/rides/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["vehicle_type"], "motorbike")
+        self.assertEqual(response.data["pickup_address_details"], "Near KFC kiosk")
+        self.assertEqual(response.data["dropoff_address_details"], "Beside administrative block")
 
 
 from .models import SOSEvent

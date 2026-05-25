@@ -41,10 +41,11 @@ class RideSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ride
-        fields = ('id', 'driver', 'driver_id', 'pickup_name', 'pickup_lat', 'pickup_lng', 
-                  'dropoff_name', 'dropoff_lat', 'dropoff_lng', 'date', 'time', 
-                  'seats_total', 'seats_available', 'price_per_seat', 'vehicle_model', 
-                  'vehicle_plate', 'notes', 'is_recurring', 'recurring_days', 'created_at')
+        fields = ('id', 'driver', 'driver_id', 'pickup_name', 'pickup_address_details', 
+                  'pickup_lat', 'pickup_lng', 'dropoff_name', 'dropoff_address_details', 
+                  'dropoff_lat', 'dropoff_lng', 'date', 'time', 'seats_total', 
+                  'seats_available', 'price_per_seat', 'vehicle_model', 'vehicle_plate', 
+                  'vehicle_type', 'notes', 'is_recurring', 'recurring_days', 'created_at')
         read_only_fields = ('created_at',)
 
     def create(self, validated_data):

@@ -40,9 +40,11 @@ class User(AbstractUser):
 class Ride(models.Model):
     driver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='driver_rides')
     pickup_name = models.CharField(max_length=200)
+    pickup_address_details = models.CharField(max_length=300, blank=True, null=True)
     pickup_lat = models.FloatField()
     pickup_lng = models.FloatField()
     dropoff_name = models.CharField(max_length=200)
+    dropoff_address_details = models.CharField(max_length=300, blank=True, null=True)
     dropoff_lat = models.FloatField()
     dropoff_lng = models.FloatField()
     date = models.DateField()
@@ -52,6 +54,7 @@ class Ride(models.Model):
     price_per_seat = models.DecimalField(max_digits=6, decimal_places=2)
     vehicle_model = models.CharField(max_length=100)
     vehicle_plate = models.CharField(max_length=20)
+    vehicle_type = models.CharField(max_length=20, default='car')  # 'car' or 'motorbike'
     notes = models.TextField(blank=True, null=True)
     is_recurring = models.BooleanField(default=False)
     recurring_days = models.CharField(max_length=100, blank=True, null=True)  # e.g., "Mon,Wed,Fri"

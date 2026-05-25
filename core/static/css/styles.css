@@ -96,6 +96,33 @@ body {
     margin-bottom: 40px;
 }
 
+.logo-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.mobile-nav-toggle {
+    display: none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-sm);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-main);
+    font-size: 20px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.mobile-nav-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--border-hover);
+}
+
 .logo-icon {
     background: linear-gradient(135deg, var(--primary), var(--secondary));
     width: 42px;
@@ -1303,6 +1330,9 @@ body {
     body {
         flex-direction: column;
     }
+    .app-container {
+        flex-direction: column;
+    }
     .app-sidebar {
         width: 100%;
         height: auto;
@@ -1310,27 +1340,50 @@ body {
         padding: 16px 20px;
         border-right: none;
         border-bottom: 1px solid var(--border-color);
+        z-index: 1002;
     }
     .logo-container {
         margin-bottom: 0;
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        align-items: center;
+    }
+    .mobile-nav-toggle {
+        display: flex;
     }
     .sidebar-user {
         display: none;
     }
     .nav-menu {
-        flex-direction: row;
-        overflow-x: auto;
-        padding: 8px 0;
-        gap: 16px;
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--bg-panel-solid);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border-bottom: 1px solid var(--border-color);
+        padding: 16px 24px;
+        gap: 6px;
+        z-index: 999;
+        list-style: none;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    }
+    .nav-menu.open {
+        display: flex;
     }
     .nav-item {
-        padding: 8px 12px;
-        font-size: 13px;
-        flex-shrink: 0;
+        width: 100%;
+        padding: 12px 16px;
+        border-radius: var(--radius-sm);
     }
     .nav-item.active {
-        border-left: none;
-        border-bottom: 2px solid var(--primary);
+        border-left: 3px solid var(--primary);
+        border-bottom: transparent;
+        background: rgba(99, 102, 241, 0.1);
     }
     .app-content {
         margin-left: 0;
@@ -1343,6 +1396,17 @@ body {
     .search-bar-panel {
         grid-template-columns: 1fr;
         gap: 16px;
+    }
+    .chat-container {
+        flex-direction: column;
+        height: auto;
+        min-height: 550px;
+    }
+    .chat-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+        max-height: 220px;
     }
 }
 
@@ -1814,5 +1878,140 @@ body {
     0%, 80%, 100% { transform: translateY(0); }
     40% { transform: translateY(-5px); }
 }
+
+/* Chatbot Ride Card Styles */
+.ai-ride-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    margin-top: 10px;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ai-ride-card:hover {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.15);
+}
+
+.ai-ride-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 6px;
+}
+
+.ai-ride-driver {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.ai-ride-price {
+    font-family: var(--font-heading);
+    font-weight: 800;
+    font-size: 13px;
+    color: white;
+}
+
+.ai-ride-route {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ai-ride-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 6px;
+    margin-top: 2px;
+}
+
+.ai-ride-footer .view-btn {
+    color: var(--primary);
+    font-weight: 700;
+    font-size: 10px;
+    transition: var(--transition);
+}
+
+.ai-ride-card:hover .view-btn {
+    color: var(--secondary);
+}
+
+/* Responsive media query for AI Copilot Chatbox on Mobile viewports */
+@media (max-width: 480px) {
+    .ai-copilot-chat-box {
+        position: fixed;
+        bottom: 90px;
+        left: 16px;
+        right: 16px;
+        width: calc(100% - 32px);
+        height: calc(100vh - 120px);
+        max-height: 500px;
+    }
+    
+    .ai-copilot-widget {
+        bottom: 16px;
+        right: 16px;
+    }
+
+    .content-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    .map-wrapper {
+        height: 300px !important;
+    }
+
+    .modal-body {
+        padding: 16px;
+    }
+
+    .modal-header, .modal-footer {
+        padding: 12px 16px;
+    }
+
+    .auth-card {
+        padding: 24px 16px;
+    }
+
+    .search-bar-panel {
+        padding: 12px;
+    }
+
+    .report-item-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+}
+
 
 

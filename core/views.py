@@ -181,6 +181,7 @@ def price_predict_view(request):
     ride_date_str = request.data.get('date', str(timezone.now().date()))
     vehicle_model = request.data.get('vehicle_model', 'Sedan')
     seats_total = int(request.data.get('seats_total', 4))
+    vehicle_type = request.data.get('vehicle_type', 'car')
     distance_km = request.data.get('distance_km', None)
     if distance_km is not None:
         try:
@@ -196,7 +197,8 @@ def price_predict_view(request):
         dropoff_lat, dropoff_lng, 
         ride_time_str, ride_date_str, 
         vehicle_model, seats_total,
-        override_distance_km=distance_km
+        override_distance_km=distance_km,
+        vehicle_type=vehicle_type
     )
     return Response(prediction)
 

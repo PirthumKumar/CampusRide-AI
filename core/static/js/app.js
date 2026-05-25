@@ -360,7 +360,48 @@ const App = {
         } else if (text.includes("hello") || text.includes("hi") || text.includes("hey")) {
             reply = `Hello! I'm here to make your commute more efficient. Ask me about pricing formulas, safety precautions, or request drafts!`;
         } else {
-            reply = `I'm not fully sure how to answer that, but I can help you with commute guidelines! You can ask about our <b>AI pricing engine</b>, <b>safety guidelines</b>, or <b>profile verification status</b>.`;
+            // Extract location keyword from query
+            const searchLocation = text
+                .replace(/\b(find|search|show|me|a|ride|rides|to|from|in|at|for|the|of|carpool|carpools)\b/g, "")
+                .trim();
+                
+            if (searchLocation.length >= 2) {
+                const { data: ridesArray, error } = await API.getRides();
+                if (ridesArray && !error) {
+                    const matches = ridesArray.filter(r => 
+                        r.pickup_name.toLowerCase().includes(searchLocation) ||
+                        r.dropoff_name.toLowerCase().includes(searchLocation)
+                    );
+                    
+                    if (matches.length > 0) {
+                        reply = `<b>🔍 Matching Rides Found:</b><br/>I found ${matches.length} active ride(s) matching "<b>${searchLocation}</b>":<br/>`;
+                        matches.forEach(ride => {
+                            const vehicleIcon = ride.vehicle_type === 'motorbike' ? '🏍️' : '🚗';
+                            reply += `
+                            <div class="ai-ride-card" onclick="window.showRideDetailFromMap(${ride.id})">
+                                <div class="ai-ride-card-header">
+                                    <span class="ai-ride-driver">${vehicleIcon} @${ride.driver.username}</span>
+                                    <span class="ai-ride-price">Rs. ${parseFloat(ride.price_per_seat).toFixed(0)}</span>
+                                </div>
+                                <div class="ai-ride-route">
+                                    <div><b>From:</b> ${ride.pickup_name} ${ride.pickup_address_details ? `<span style="font-size:10px; color:var(--text-muted);">(${ride.pickup_address_details})</span>` : ''}</div>
+                                    <div><b>To:</b> ${ride.dropoff_name} ${ride.dropoff_address_details ? `<span style="font-size:10px; color:var(--text-muted);">(${ride.dropoff_address_details})</span>` : ''}</div>
+                                </div>
+                                <div class="ai-ride-footer">
+                                    <span>📅 ${ride.date}</span>
+                                    <span class="view-btn">View Details ➔</span>
+                                </div>
+                            </div>`;
+                        });
+                    } else {
+                        reply = `I couldn't find any active rides matching "<b>${searchLocation}</b>". Try searching for active rides using a different location name, or ask about our <b>AI pricing engine</b>, <b>safety guidelines</b>, or <b>profile verification status</b>.`;
+                    }
+                } else {
+                    reply = `I encountered an issue searching for active rides. Please try again.`;
+                }
+            } else {
+                reply = `I'm not fully sure how to answer that, but I can help you with commute guidelines! You can ask about our <b>AI pricing engine</b>, <b>safety guidelines</b>, or type a location name (e.g., 'Clifton', 'DHA Suffa') to search active carpools.`;
+            }
         }
         
         this.addAiCopilotMessage(reply, 'bot');
@@ -576,11 +617,17 @@ const App = {
                             <div class="ride-price">Rs. ${parseFloat(ride.price_per_seat).toFixed(0)}</div>
                         </div>
                         <div class="route-timeline">
-                            <div class="timeline-stop pickup">${ride.pickup_name}</div>
-                            <div class="timeline-stop dropoff">${ride.dropoff_name}</div>
+                            <div class="timeline-stop pickup">
+                                ${ride.pickup_name}
+                                ${ride.pickup_address_details ? `<div class="route-timeline-details" style="font-size:10px; color:var(--text-muted); margin-left: 14px;">(${ride.pickup_address_details})</div>` : ''}
+                            </div>
+                            <div class="timeline-stop dropoff">
+                                ${ride.dropoff_name}
+                                ${ride.dropoff_address_details ? `<div class="route-timeline-details" style="font-size:10px; color:var(--text-muted); margin-left: 14px;">(${ride.dropoff_address_details})</div>` : ''}
+                            </div>
                         </div>
-                        <div style="font-size: 12px; color: var(--text-muted);">
-                            <i class="ri-user-fill"></i> ${ride.seats_available} / ${ride.seats_total} seats remaining
+                        <div style="font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px;">
+                            <i class="${ride.vehicle_type === 'motorbike' ? 'ri-motorbike-fill' : 'ri-car-fill'}"></i> ${ride.seats_available} / ${ride.seats_total} seats remaining
                         </div>
                     `;
                     myRidesNode.appendChild(card);
@@ -609,15 +656,21 @@ const App = {
                             <div class="ride-card-driver">
                                 <img src="${ride.driver.avatar_url}" onerror="window.handleAvatarError(this, '${ride.driver.username}')" class="driver-mini-avatar"/>
                                 <div class="driver-name-rating">
-                                    <span class="driver-name">@${ride.driver.username}</span>
+                                    <span class="driver-name">@${ride.driver.username} <i class="${ride.vehicle_type === 'motorbike' ? 'ri-motorbike-fill' : 'ri-car-fill'}" style="margin-left:4px;"></i></span>
                                     <span class="driver-rating">⭐ ${ride.driver.rating_avg}</span>
                                 </div>
                             </div>
                             <div class="ride-price">Rs. ${parseFloat(ride.price_per_seat).toFixed(0)}</div>
                         </div>
                         <div class="route-timeline">
-                            <div class="timeline-stop pickup">${ride.pickup_name}</div>
-                            <div class="timeline-stop dropoff">${ride.dropoff_name}</div>
+                            <div class="timeline-stop pickup">
+                                ${ride.pickup_name}
+                                ${ride.pickup_address_details ? `<div class="route-timeline-details" style="font-size:10px; color:var(--text-muted); margin-left: 14px;">(${ride.pickup_address_details})</div>` : ''}
+                            </div>
+                            <div class="timeline-stop dropoff">
+                                ${ride.dropoff_name}
+                                ${ride.dropoff_address_details ? `<div class="route-timeline-details" style="font-size:10px; color:var(--text-muted); margin-left: 14px;">(${ride.dropoff_address_details})</div>` : ''}
+                            </div>
                         </div>
                         <div class="ride-card-footer">
                             <div>${ride.date} @ ${ride.time.substring(0, 5)}</div>
@@ -874,13 +927,19 @@ const App = {
                     <div class="ride-price">Rs. ${parseFloat(ride.price_per_seat).toFixed(0)} <span>/ seat</span></div>
                 </div>
                 <div class="route-timeline">
-                    <div class="timeline-stop pickup">${ride.pickup_name}</div>
-                    <div class="timeline-stop dropoff">${ride.dropoff_name}</div>
+                    <div class="timeline-stop pickup">
+                        ${ride.pickup_name}
+                        ${ride.pickup_address_details ? `<div class="route-timeline-details" style="font-size:10px; color:var(--text-muted); margin-left: 14px;">(${ride.pickup_address_details})</div>` : ''}
+                    </div>
+                    <div class="timeline-stop dropoff">
+                        ${ride.dropoff_name}
+                        ${ride.dropoff_address_details ? `<div class="route-timeline-details" style="font-size:10px; color:var(--text-muted); margin-left: 14px;">(${ride.dropoff_address_details})</div>` : ''}
+                    </div>
                 </div>
                 <div class="ride-card-footer">
                     <div class="ride-meta-item"><i class="ri-calendar-line"></i> ${ride.date}</div>
                     <div class="ride-meta-item"><i class="ri-time-line"></i> ${ride.time.substring(0, 5)}</div>
-                    <div class="ride-meta-item"><i class="ri-user-fill"></i> ${ride.seats_available} seats left</div>
+                    <div class="ride-meta-item"><i class="${ride.vehicle_type === 'motorbike' ? 'ri-motorbike-fill' : 'ri-car-fill'}"></i> ${ride.seats_available} seats left</div>
                 </div>
             `;
             listNode.appendChild(card);
@@ -949,6 +1008,12 @@ const App = {
         // Reset inputs
         document.getElementById('createRideFormNode').reset();
         document.getElementById('recurringDaysNode').style.display = 'none';
+        
+        const seatsInput = document.getElementById('createSeats');
+        if (seatsInput) {
+            seatsInput.max = 8;
+            seatsInput.disabled = false;
+        }
 
         // Reset map search overlay & directions
         document.getElementById('createDirectionsGuide').style.display = 'none';
@@ -1031,6 +1096,7 @@ const App = {
         const seats = parseInt(document.getElementById('createSeats').value);
         const timeVal = document.getElementById('createTime').value;
         const dateVal = document.getElementById('createDate').value;
+        const vehicleType = document.getElementById('createVehicleType').value;
 
         const data = {
             pickup_lat: this.createPickupCoords.lat,
@@ -1041,6 +1107,7 @@ const App = {
             date: dateVal,
             vehicle_model: model,
             seats_total: seats,
+            vehicle_type: vehicleType,
             distance_km: this.createRouteDistanceKm || null
         };
 
@@ -1075,12 +1142,15 @@ const App = {
 
     async submitPublishedRide() {
         const pickName = document.getElementById('createPickupName').value;
+        const pickDetails = document.getElementById('createPickupAddressDetails').value.trim();
         const dropName = document.getElementById('createDropoffName').value;
+        const dropDetails = document.getElementById('createDropoffAddressDetails').value.trim();
         const dateVal = document.getElementById('createDate').value;
         const timeVal = document.getElementById('createTime').value;
         const model = document.getElementById('createVehicleModel').value;
         const plate = document.getElementById('createVehiclePlate').value;
         const seats = parseInt(document.getElementById('createSeats').value);
+        const vehicleType = document.getElementById('createVehicleType').value;
         const price = parseFloat(document.getElementById('createPriceSlider').value);
         const notes = document.getElementById('createNotes').value;
         
@@ -1092,9 +1162,11 @@ const App = {
 
         const payload = {
             pickup_name: pickName,
+            pickup_address_details: pickDetails || null,
             pickup_lat: this.createPickupCoords.lat,
             pickup_lng: this.createPickupCoords.lng,
             dropoff_name: dropName,
+            dropoff_address_details: dropDetails || null,
             dropoff_lat: this.createDropoffCoords.lat,
             dropoff_lng: this.createDropoffCoords.lng,
             date: dateVal,
@@ -1103,6 +1175,7 @@ const App = {
             price_per_seat: price,
             vehicle_model: model,
             vehicle_plate: plate,
+            vehicle_type: vehicleType,
             notes: notes,
             is_recurring: isRec,
             recurring_days: recDays.join(',')
@@ -1660,9 +1733,27 @@ const App = {
                 <div class="timeline-stop dropoff"><b>Dropoff Destination:</b> ${ride.dropoff_name}</div>
             `;
 
-            // Extra notes
+            // Vehicle Type & Details
+            document.getElementById('modalVehicleType').innerText = ride.vehicle_type === 'motorbike' ? 'Motorbike' : 'Car';
             document.getElementById('modalVehicleText').innerText = ride.vehicle_model;
             document.getElementById('modalNotesText').innerText = ride.notes || 'No commuter comments.';
+
+            // Extra address details
+            const pickupDetailsNode = document.getElementById('modalPickupDetailsNode');
+            if (ride.pickup_address_details) {
+                pickupDetailsNode.style.display = 'block';
+                document.getElementById('modalPickupDetailsText').innerText = ride.pickup_address_details;
+            } else {
+                pickupDetailsNode.style.display = 'none';
+            }
+
+            const dropoffDetailsNode = document.getElementById('modalDropoffDetailsNode');
+            if (ride.dropoff_address_details) {
+                dropoffDetailsNode.style.display = 'block';
+                document.getElementById('modalDropoffDetailsText').innerText = ride.dropoff_address_details;
+            } else {
+                dropoffDetailsNode.style.display = 'none';
+            }
 
             // Render passengers list
             const passNode = document.getElementById('modalPassengersListNode');
@@ -1924,12 +2015,41 @@ const App = {
     // GLOBAL BINDINGS
     // ----------------------------------------------------
     bindEvents() {
+        // Mobile Navigation Toggle
+        const toggleBtn = document.getElementById('mobileNavToggleBtn');
+        const navMenu = document.querySelector('.nav-menu');
+
+        if (toggleBtn && navMenu) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                navMenu.classList.toggle('open');
+                const isOpen = navMenu.classList.contains('open');
+                toggleBtn.innerHTML = isOpen ? '<i class="ri-close-line"></i>' : '<i class="ri-menu-line"></i>';
+            });
+
+            // Close mobile menu if clicked outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.app-sidebar')) {
+                    navMenu.classList.remove('open');
+                    toggleBtn.innerHTML = '<i class="ri-menu-line"></i>';
+                }
+            });
+        }
+
         // Nav menu clicks
         document.querySelectorAll('.nav-item').forEach(link => {
             link.addEventListener('click', (e) => {
                 e.preventDefault();
                 const view = link.getAttribute('data-view');
                 if (view) this.showView(view);
+
+                // Auto-close mobile menu on selection
+                if (navMenu) {
+                    navMenu.classList.remove('open');
+                }
+                if (toggleBtn) {
+                    toggleBtn.innerHTML = '<i class="ri-menu-line"></i>';
+                }
             });
         });
 
@@ -2133,6 +2253,23 @@ const App = {
         document.getElementById('createIsRecurring').addEventListener('change', (e) => {
             document.getElementById('recurringDaysNode').style.display = e.target.checked ? 'block' : 'none';
         });
+
+        // Vehicle type select listener to constrain seats for motorbikes
+        const vehicleTypeSelect = document.getElementById('createVehicleType');
+        if (vehicleTypeSelect) {
+            vehicleTypeSelect.addEventListener('change', (e) => {
+                const seatsInput = document.getElementById('createSeats');
+                if (e.target.value === 'motorbike') {
+                    seatsInput.value = 1;
+                    seatsInput.max = 1;
+                    seatsInput.disabled = true;
+                } else {
+                    seatsInput.value = 4;
+                    seatsInput.max = 8;
+                    seatsInput.disabled = false;
+                }
+            });
+        }
 
         // Create price prediction range slider
         document.getElementById('createPriceSlider').addEventListener('input', (e) => {

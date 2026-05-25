@@ -50,7 +50,7 @@ def is_rush_hour(ride_time_str, ride_date_str=None):
     except Exception:
         return False
 
-def get_price_prediction(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_time_str, ride_date_str, vehicle_model, seats_total, override_distance_km=None):
+def get_price_prediction(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_time_str, ride_date_str, vehicle_model, seats_total, override_distance_km=None, vehicle_type='car'):
     """
     AI/ML pricing engine that estimates a fair carpool price per seat.
     """
@@ -67,25 +67,33 @@ def get_price_prediction(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_
     distance_km = max(distance_km, 0.5)
 
     # 2. Base components (in PKR)
-    base_fare = 150.0  # Fixed vehicle wear & tear starting cost in PKR
-    price_per_km = 20.0  # Fuel/maintenance cost per km in PKR
+    if vehicle_type == 'motorbike':
+        base_fare = 50.0
+        price_per_km = 8.0
+    else:
+        base_fare = 150.0  # Fixed vehicle wear & tear starting cost in PKR
+        price_per_km = 20.0  # Fuel/maintenance cost per km in PKR
     raw_distance_fare = distance_km * price_per_km
 
     # 3. Vehicle multiplier
-    # Determine type by simple keyword matching on the model string
-    v_model_lower = vehicle_model.lower()
-    if any(k in v_model_lower for k in ['hybrid', 'tesla', 'electric', 'ev', 'prius', 'leaf']):
-        vehicle_multiplier = 0.85
-        vehicle_type = "Eco-Friendly / Electric (15% Off)"
-    elif any(k in v_model_lower for k in ['suv', 'truck', 'jeep', 'crossover', 'van', 'crv', 'rav4']):
-        vehicle_multiplier = 1.20
-        vehicle_type = "SUV / Large Vehicle (20% Premium)"
-    elif any(k in v_model_lower for k in ['compact', 'hatchback', 'yaris', 'fit', 'civic']):
-        vehicle_multiplier = 0.90
-        vehicle_type = "Compact / Budget (10% Off)"
-    else:
+    if vehicle_type == 'motorbike':
         vehicle_multiplier = 1.00
-        vehicle_type = "Standard Sedan (1.0x)"
+        vehicle_type_desc = "Motorbike (Budget 2-Wheel)"
+    else:
+        # Determine type by simple keyword matching on the model string
+        v_model_lower = vehicle_model.lower()
+        if any(k in v_model_lower for k in ['hybrid', 'tesla', 'electric', 'ev', 'prius', 'leaf']):
+            vehicle_multiplier = 0.85
+            vehicle_type_desc = "Eco-Friendly / Electric (15% Off)"
+        elif any(k in v_model_lower for k in ['suv', 'truck', 'jeep', 'crossover', 'van', 'crv', 'rav4']):
+            vehicle_multiplier = 1.20
+            vehicle_type_desc = "SUV / Large Vehicle (20% Premium)"
+        elif any(k in v_model_lower for k in ['compact', 'hatchback', 'yaris', 'fit', 'civic']):
+            vehicle_multiplier = 0.90
+            vehicle_type_desc = "Compact / Budget (10% Off)"
+        else:
+            vehicle_multiplier = 1.00
+            vehicle_type_desc = "Standard Sedan (1.0x)"
 
     # 4. Traffic multiplier
     if is_rush_hour(ride_time_str, ride_date_str):
@@ -110,23 +118,28 @@ def get_price_prediction(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_
         pass
 
     # 6. Seat Cost Sharing Discount
-    # Share expenses among passengers. More seats = split cost, but incentivized
-    # Standard formula is total ride cost / (expected occupancy). 
-    # For a typical carpool, we assume driver is commuting anyway, so seats_total determines discount factor
-    seat_factor = 1.0
-    if seats_total >= 6:
-        seat_factor = 0.80  # Large group discount
-    elif seats_total >= 4:
-        seat_factor = 0.90
-    elif seats_total <= 2:
-        seat_factor = 1.10  # Single passenger premium
+    if vehicle_type == 'motorbike':
+        seat_factor = 1.0
+    else:
+        # Share expenses among passengers. More seats = split cost, but incentivized
+        # Standard formula is total ride cost / (expected occupancy). 
+        # For a typical carpool, we assume driver is commuting anyway, so seats_total determines discount factor
+        seat_factor = 1.0
+        if seats_total >= 6:
+            seat_factor = 0.80  # Large group discount
+        elif seats_total >= 4:
+            seat_factor = 0.90
+        elif seats_total <= 2:
+            seat_factor = 1.10  # Single passenger premium
 
     # 7. Total Ride Cost Calculation
     total_ride_cost = (base_fare + raw_distance_fare) * vehicle_multiplier * traffic_multiplier * demand_multiplier
     
     # Per Seat Recommended Price
-    # Divide total ride cost by an expected occupancy (assuming 60% of available seats are filled)
-    expected_occupants = max(seats_total * 0.6, 1.0)
+    if vehicle_type == 'motorbike':
+        expected_occupants = 1.0
+    else:
+        expected_occupants = max(seats_total * 0.6, 1.0)
     recommended_per_seat = (total_ride_cost * seat_factor) / expected_occupants
     
     # Cap the recommended price to reasonable bounds in PKR (min Rs. 50 per seat)
@@ -138,7 +151,7 @@ def get_price_prediction(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_
         'distance_km': round(distance_km, 2),
         'base_fare': round(base_fare, 2),
         'distance_fare': round(raw_distance_fare, 2),
-        'vehicle_type': vehicle_type,
+        'vehicle_type': vehicle_type_desc,
         'vehicle_multiplier': vehicle_multiplier,
         'traffic_status': traffic_status,
         'traffic_multiplier': traffic_multiplier,
@@ -147,7 +160,7 @@ def get_price_prediction(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, ride_
         'seat_factor': seat_factor,
         'explanation': (
             f"Suggested price: Rs. {recommended_per_seat:.2f} per seat. "
-            f"Based on a {distance_km:.1f} km trip, using a {vehicle_type}. "
+            f"Based on a {distance_km:.1f} km trip, using a {vehicle_type_desc}. "
             f"Adjusted for {traffic_status} and {demand_status}."
         )
     }
