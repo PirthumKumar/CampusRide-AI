@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CampusRide | AI-Powered Student Carpool Platform</title>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- Remix Icons CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet"/>
+    
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="/static/css/styles.css?v=1.3"/>
+</head>
+<body>
+
+    <!-- Main Application Wrapper -->
+    <div class="app-container" id="appRoot">
+        
+        <!-- Sidebar Navigation (Hidden for guests) -->
+        <aside class="app-sidebar" id="sidebarNode" style="display: none;">
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <i class="ri-car-fill"></i>
+                </div>
+                <div class="logo-text">CampusRide</div>
+            </div>
+            
+            <nav style="flex: 1;">
+                <ul class="nav-menu">
+                    <li><a class="nav-item active" data-view="dashboard" id="navDashboardNode"><i class="ri-dashboard-line"></i> Dashboard</a></li>
+                    <li><a class="nav-item" data-view="search" id="navSearchNode"><i class="ri-search-eye-line"></i> Find Rides</a></li>
+                    <li><a class="nav-item" data-view="create" id="navCreateNode"><i class="ri-add-circle-line"></i> Create a Ride</a></li>
+                    <li><a class="nav-item" data-view="bookings" id="navBookingsNode"><i class="ri-calendar-todo-line"></i> My Bookings</a></li>
+                    <li><a class="nav-item" data-view="chat" id="navChatNode"><i class="ri-message-3-line"></i> Inbox</a></li>
+                    <li><a class="nav-item" data-view="verification" id="navVerificationNode"><i class="ri-shield-user-line"></i> ID Verification</a></li>
+                    <li id="adminNavNode" style="display: none;"><a class="nav-item" data-view="admin"><i class="ri-admin-line"></i> Admin Panel</a></li>
+                </ul>
+            </nav>
+            
+            <!-- User Profile card footer -->
+            <div class="sidebar-user" id="sidebarUserNode">
+                <div class="user-avatar-container">
+                    <img src="/static/images/default-avatar.png" id="sidebarAvatar" class="user-avatar"/>
+                    <div class="verified-badge" id="sidebarVerifiedBadge" style="display: none;"><i class="ri-check-line"></i></div>
+                </div>
+                <div class="user-details">
+                    <span class="user-name" id="sidebarUsername">Loading...</span>
+                    <span class="user-university" id="sidebarUniversity">Campus member</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="app-content" id="contentNode">
+            
+            <!-- Top Content Header -->
+            <header class="content-header" id="headerNode" style="display: none;">
+                <div class="header-title-group">
+                    <h1 id="headerTitle">Dashboard</h1>
+                    <p id="headerSubtitle">Welcome back to CampusRide!</p>
+                </div>
+                <div class="header-actions">
+                    <!-- Notification bell with wrapper -->
+                    <div class="notification-wrapper">
+                        <button class="notification-bell-btn" id="notiBellBtn">
+                            <i class="ri-notification-3-line"></i>
+                            <div class="notification-badge" id="notiBadge" style="display: none;"></div>
+                        </button>
+                        
+                        <!-- Notifications Dropdown -->
+                        <div class="notification-dropdown" id="notiDropdown" style="display: none;">
+                            <div class="notification-dropdown-header">
+                                <h4>Notifications</h4>
+                                <button id="notiMarkAllReadBtn">Mark All Read</button>
+                            </div>
+                            <div class="notification-dropdown-list" id="notiDropdownListNode">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Log out button -->
+                    <button class="btn btn-secondary btn-sm" id="logoutBtn"><i class="ri-logout-box-r-line"></i> Log Out</button>
+                </div>
+            </header>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 1. GUEST VIEW (Login & Signup Cards) -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-guest" class="auth-page">
+                <div class="card auth-card">
+                    <div class="auth-header">
+                        <div class="logo-icon auth-logo">
+                            <i class="ri-car-fill"></i>
+                        </div>
+                        <h2>CampusRide Login</h2>
+                        <p>AI-Powered Student Carpool Platform</p>
+                    </div>
+                    
+                    <div id="loginFormNode">
+                        <div class="form-group">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-input" id="loginUsername" placeholder="Enter student username" required/>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="loginPassword" placeholder="••••••••" required/>
+                        </div>
+                        <button class="btn btn-primary" id="loginSubmitBtn" style="width: 100%; margin-top: 10px;">Sign In</button>
+                        <p style="text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted);">
+                            Don't have an account? <a href="#" id="toggleSignupBtn" style="color: var(--primary); font-weight: 600; text-decoration: none;">Register here</a>
+                        </p>
+                    </div>
+
+                    <div id="signupFormNode" style="display: none;">
+                        <div class="form-group">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-input" id="signupUsername" placeholder="e.g. alice_jones" required/>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-input" id="signupEmail" placeholder="student@university.edu" required/>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-input" id="signupPassword" placeholder="Minimum 6 characters" required/>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">University</label>
+                                <input type="text" class="form-input" id="signupUniversity" placeholder="e.g. Stanford" required/>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Role</label>
+                                <select class="form-input" id="signupRole">
+                                    <option value="student">Student (Passenger & Driver)</option>
+                                    <option value="external_driver">External Driver</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Gender</label>
+                            <select class="form-input" id="signupGender">
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Phone Number</label>
+                            <input type="text" class="form-input" id="signupPhone" placeholder="+1 (555) 123-4567" required/>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Emergency Contact Name/Phone</label>
+                            <input type="text" class="form-input" id="signupEmergency" placeholder="Parent / Guardian Name - Phone" required/>
+                        </div>
+                        <button class="btn btn-primary" id="signupSubmitBtn" style="width: 100%; margin-top: 10px;">Create Account</button>
+                        <p style="text-align: center; margin-top: 20px; font-size: 13px; color: var(--text-muted);">
+                            Already have an account? <a href="#" id="toggleLoginBtn" style="color: var(--primary); font-weight: 600; text-decoration: none;">Sign In here</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 2. DASHBOARD SCREEN -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-dashboard" class="dashboard-section" style="display: none;">
+                <!-- Stat Cards -->
+                <div class="grid-cols-3" id="dashboardStatsGrid" style="margin-bottom: 32px;">
+                    <div class="card stat-card" id="statCardRides">
+                        <div class="stat-icon primary"><i class="ri-direction-fill"></i></div>
+                        <div>
+                            <div class="stat-value" id="dashTotalRides">0</div>
+                            <div class="stat-label">Active Campus Rides</div>
+                        </div>
+                    </div>
+                    <div class="card stat-card" id="statCardBookings">
+                        <div class="stat-icon secondary"><i class="ri-bookmark-3-line"></i></div>
+                        <div>
+                            <div class="stat-value" id="dashMyBookings">0</div>
+                            <div class="stat-label">My Ride Bookings</div>
+                        </div>
+                    </div>
+                    <div class="card stat-card" id="statCardVerification">
+                        <div class="stat-icon accent" id="dashVerifiedStatusIcon"><i class="ri-shield-check-line"></i></div>
+                        <div>
+                            <div class="stat-value" id="dashVerifiedStatusText">Unverified</div>
+                            <div class="stat-label">Verification Status</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recents list -->
+                <div class="grid-cols-2" id="dashboardGrid">
+                    <div class="card" id="myOfferingsCard">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-steering-fill" style="color: var(--primary);"></i> Rides You're Offering</h3>
+                        <div id="dashboardMyRidesNode" class="rides-list" style="max-height: 350px;">
+                            <!-- Dynamically loaded -->
+                        </div>
+                    </div>
+                    <div class="card" id="myBookingsCard">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-user-shared-fill" style="color: var(--secondary);"></i> Rides You've Booked</h3>
+                        <div id="dashboardMyBookingsNode" class="rides-list" style="max-height: 350px;">
+                            <!-- Dynamically loaded -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 3. SEARCH & MATCH SCREEN (MAP + LIST SPLIT) -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-search" class="search-container" style="display: none;">
+                <!-- Search Bar Panel -->
+                <div class="search-bar-panel">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="margin-bottom: 4px;">Pickup Location</label>
+                        <input type="text" class="form-input" id="searchPickup" placeholder="e.g. Campus Library"/>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="margin-bottom: 4px;">Dropoff Location</label>
+                        <input type="text" class="form-input" id="searchDropoff" placeholder="e.g. Downtown Mall"/>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="margin-bottom: 4px;">Travel Date</label>
+                        <input type="date" class="form-input" id="searchDate"/>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label" style="margin-bottom: 4px;">Seats Needed</label>
+                        <input type="number" class="form-input" id="searchSeats" min="1" value="1"/>
+                    </div>
+                    <button class="btn btn-secondary" id="searchSmartMatchBtn" title="Find optimal overlay rides near your locations"><i class="ri-magic-line"></i> Match</button>
+                    <button class="btn btn-primary" id="searchSubmitBtn"><i class="ri-search-line"></i> Find</button>
+                </div>
+
+                <!-- Map and list container -->
+                <div class="search-results-section">
+                    <!-- Left side: List of matches -->
+                    <div style="display: flex; flex-direction: column; gap: 16px;">
+                        <h3 id="searchResultsTitle" style="font-family: var(--font-heading);">All Available Rides</h3>
+                        <div id="ridesListNode" class="rides-list">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                    <!-- Right side: Leaflet interactive map with Search Overlay & Directions -->
+                    <div style="display: flex; flex-direction: column;">
+                        <div class="map-wrapper" style="height: 500px; position: relative;">
+                            <!-- Floating Search bar inside Pakistan -->
+                            <div class="map-search-overlay">
+                                <div class="map-search-row">
+                                    <input type="text" class="map-search-input" id="searchMapQuery" placeholder="Search Pakistan locations..."/>
+                                    <button class="map-search-btn" id="searchMapBtn" type="button"><i class="ri-search-line"></i></button>
+                                </div>
+                                <ul class="map-search-results" id="searchMapResults"></ul>
+                            </div>
+                            <div class="map-container" id="searchMapCanvas"></div>
+                            <!-- Clicking map instructions overlay -->
+                            <div style="position: absolute; bottom: 10px; left: 10px; z-index: 1010; background: rgba(0,0,0,0.8); border: 1px solid var(--border-color); padding: 6px 12px; border-radius: 6px; font-size: 11px;">
+                                <i class="ri-information-line"></i> Search Pakistan: use map search bar, click map to set coordinates, or type.
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible Directions Box -->
+                        <div class="directions-guide-container" id="searchDirectionsGuide">
+                            <div class="directions-guide-header" onclick="const b = document.getElementById('searchDirectionsBody'); b.style.display = b.style.display === 'none' ? 'block' : 'none'">
+                                <span class="directions-guide-title"><i class="ri-navigation-line"></i> Route & Directions Guidance</span>
+                                <i class="ri-arrow-down-s-line"></i>
+                            </div>
+                            <div class="directions-guide-body" id="searchDirectionsBody" style="display: block;">
+                                <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">Specify pickup and drop-off coordinates to calculate driving directions and distances.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 4. CREATE A RIDE (MULTI-STEP PANEL) -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-create" class="create-ride-section" style="display: none;">
+                <div class="card" style="max-width: 800px; margin: 0 auto;">
+                    <div style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                        <h2 style="font-family: var(--font-heading); font-weight: 800;"><i class="ri-steering-2-line" style="color: var(--primary);"></i> Share a Ride</h2>
+                        <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Fill details to create a ride, evaluate fair prices, and let students book seats.</p>
+                    </div>
+
+                    <!-- Steps display indicator -->
+                    <div style="display: flex; gap: 12px; margin-bottom: 30px;">
+                        <div class="btn btn-primary btn-sm" id="createStep1Indicator" style="border-radius: 20px; font-size: 11px;">1. Route & Coordinates</div>
+                        <div class="btn btn-secondary btn-sm" id="createStep2Indicator" style="border-radius: 20px; font-size: 11px; cursor: default;">2. Vehicle & Capacity</div>
+                        <div class="btn btn-secondary btn-sm" id="createStep3Indicator" style="border-radius: 20px; font-size: 11px; cursor: default;">3. AI Pricing Recommendation</div>
+                    </div>
+
+                    <!-- Blocker for unverified external drivers -->
+                    <div id="createRideBlocker" style="display: none; text-align: center; padding: 40px 20px;">
+                        <div style="font-size: 64px; color: var(--error); margin-bottom: 20px;">
+                            <i class="ri-shield-user-line"></i>
+                        </div>
+                        <h3 style="font-family: var(--font-heading); font-weight: 700; margin-bottom: 12px;">Verification Required</h3>
+                        <p style="color: var(--text-muted); font-size: 14px; max-width: 500px; margin: 0 auto 24px auto;">
+                            External drivers must have their profile verified by an administrator before they can publish rides. Please submit your verification details in the verification panel.
+                        </p>
+                        <button class="btn btn-primary" onclick="App.showView('verification')">Go to Verification</button>
+                    </div>
+
+                    <form id="createRideFormNode">
+                        <!-- Step 1 Layout -->
+                        <div id="createStep1Form">
+                            <div class="grid-cols-2" style="margin-bottom: 20px;">
+                                <div>
+                                    <div class="form-group">
+                                        <label class="form-label">Pickup Campus/Location Name</label>
+                                        <input type="text" class="form-input" id="createPickupName" placeholder="e.g. Stanford Union Bookstore" required/>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label">Pickup Latitude</label>
+                                            <input type="number" step="any" class="form-input" id="createPickupLat" placeholder="37.427" required/>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Pickup Longitude</label>
+                                            <input type="number" step="any" class="form-input" id="createPickupLng" placeholder="-122.169" required/>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="form-group">
+                                        <label class="form-label">Dropoff Campus/Location Name</label>
+                                        <input type="text" class="form-input" id="createDropoffName" placeholder="e.g. San Jose Student Housing" required/>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label">Dropoff Latitude</label>
+                                            <input type="number" step="any" class="form-input" id="createDropoffLat" placeholder="37.338" required/>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Dropoff Longitude</label>
+                                            <input type="number" step="any" class="form-input" id="createDropoffLng" placeholder="-121.886" required/>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="map-wrapper" style="height: 350px; margin-bottom: 24px;">
+                                <!-- Floating Search bar inside Pakistan -->
+                                <div class="map-search-overlay">
+                                    <div class="map-search-row">
+                                        <input type="text" class="map-search-input" id="createMapQuery" placeholder="Search Pakistan locations..."/>
+                                        <button class="map-search-btn" id="createMapBtn" type="button"><i class="ri-search-line"></i></button>
+                                    </div>
+                                    <ul class="map-search-results" id="createMapResults"></ul>
+                                </div>
+                                <div class="map-container" id="createMapCanvas"></div>
+                                <div style="position: absolute; bottom: 10px; left: 10px; z-index: 1010; background: rgba(0,0,0,0.85); padding: 6px 12px; border-radius: 4px; font-size: 11px; border: 1px solid var(--border-color);">
+                                    <i class="ri-cursor-line"></i> Search Pakistan overlay or click map: 1st click = Pickup, 2nd click = Dropoff.
+                                </div>
+                            </div>
+
+                            <!-- Collapsible Directions Box -->
+                            <div class="directions-guide-container" id="createDirectionsGuide" style="margin-bottom: 20px;">
+                                <div class="directions-guide-header" onclick="const b = document.getElementById('createDirectionsBody'); b.style.display = b.style.display === 'none' ? 'block' : 'none'">
+                                    <span class="directions-guide-title"><i class="ri-navigation-line"></i> Route & Directions Guidance</span>
+                                    <i class="ri-arrow-down-s-line"></i>
+                                </div>
+                                <div class="directions-guide-body" id="createDirectionsBody" style="display: block;">
+                                    <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">Select pickup and drop-off coordinates on the map or search to view path directions.</div>
+                                </div>
+                            </div>
+
+                            <div class="form-row" style="margin-bottom: 20px;">
+                                <div class="form-group">
+                                    <label class="form-label">Travel Date</label>
+                                    <input type="date" class="form-input" id="createDate" required/>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Time of Departure</label>
+                                    <input type="time" class="form-input" id="createTime" required/>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-toggle">
+                                    <input type="checkbox" id="createIsRecurring"/>
+                                    Recurring Ride (daily or weekly commute)
+                                </label>
+                            </div>
+                            
+                            <div id="recurringDaysNode" class="form-group" style="display: none;">
+                                <label class="form-label">Select Commuting Days</label>
+                                <div style="display: flex; gap: 10px;">
+                                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="recDay" value="Mon"/> Mon</label>
+                                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="recDay" value="Tue"/> Tue</label>
+                                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="recDay" value="Wed"/> Wed</label>
+                                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="recDay" value="Thu"/> Thu</label>
+                                    <label style="font-size: 12px; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="recDay" value="Fri"/> Fri</label>
+                                </div>
+                            </div>
+
+                            <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+                                <button type="button" class="btn btn-primary" id="step1NextBtn">Continue to Step 2 <i class="ri-arrow-right-line"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- Step 2 Layout -->
+                        <div id="createStep2Form" style="display: none;">
+                            <div class="grid-cols-2" style="margin-bottom: 20px;">
+                                <div class="form-group">
+                                    <label class="form-label">Vehicle Model / Description</label>
+                                    <input type="text" class="form-input" id="createVehicleModel" placeholder="e.g. Tesla Model 3 (White) or Civic Hybrid" required/>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">License Plate (kept private until booked)</label>
+                                    <input type="text" class="form-input" id="createVehiclePlate" placeholder="e.g. 7XYZ99" required/>
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-bottom: 24px;">
+                                <label class="form-label">Number of Available Passenger Seats</label>
+                                <input type="number" class="form-input" id="createSeats" min="1" max="8" value="4" required/>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                                <button type="button" class="btn btn-secondary" id="step2BackBtn"><i class="ri-arrow-left-line"></i> Back</button>
+                                <button type="button" class="btn btn-primary" id="step2NextBtn">Calculate AI Pricing <i class="ri-magic-line"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- Step 3 Layout -->
+                        <div id="createStep3Form" style="display: none;">
+                            <div class="estimator-box" id="pricePredictionResultNode">
+                                <!-- Price prediction calculations render here -->
+                            </div>
+
+                            <div class="form-group" style="margin-top: 24px;">
+                                <label class="form-label" style="display: flex; justify-content: space-between;">
+                                    <span>Set Your Price Per Seat (Rs.)</span>
+                                    <span id="priceSliderValText" style="color: white; font-weight: bold;">Rs. 150</span>
+                                </label>
+                                <input type="range" id="createPriceSlider" class="form-input" min="50" max="1000" step="10" value="150" style="padding: 0;"/>
+                                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">You can adjust the suggested price up or down manually depending on your preference.</span>
+                            </div>
+
+                            <div class="form-group">
+                                <label class="form-label">Carpool Notes (optional)</label>
+                                <textarea class="form-input" id="createNotes" rows="3" placeholder="e.g. No smoking. Large trunk space for bags. Bringing music!"></textarea>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; margin-top: 20px;">
+                                <button type="button" class="btn btn-secondary" id="step3BackBtn"><i class="ri-arrow-left-line"></i> Back</button>
+                                <button type="button" class="btn btn-primary" id="createSubmitBtn"><i class="ri-checkbox-circle-line"></i> Publish Ride</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 5. BOOKINGS SCREEN -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-bookings" class="bookings-section" style="display: none;">
+                <div class="grid-cols-2" id="bookingsGrid">
+                    <!-- Received seat requests -->
+                    <div class="card" id="receivedBookingsCard">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-inbox-archive-line" style="color: var(--primary);"></i> Seat Booking Requests (Received)</h3>
+                        <div id="receivedBookingsNode" class="rides-list" style="max-height: 600px;">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                    <!-- Your ride requests -->
+                    <div class="card" id="sentBookingsCard">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-ticket-2-line" style="color: var(--secondary);"></i> Your Seat Bookings (Sent)</h3>
+                        <div id="sentBookingsNode" class="rides-list" style="max-height: 600px;">
+                            <!-- Loaded dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 6. CHAT WINDOW SYSTEM -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-chat" class="chat-section" style="display: none;">
+                <div class="chat-container">
+                    
+                    <!-- Conversations column -->
+                    <div class="chat-sidebar">
+                        <div class="chat-sidebar-header">
+                            <h3 style="font-family: var(--font-heading); font-size: 18px;"><i class="ri-message-line"></i> Conversations</h3>
+                        </div>
+                        <ul class="conversation-list" id="convoListNode">
+                            <!-- Loaded dynamically -->
+                        </ul>
+                    </div>
+
+                    <!-- Selected conversation column -->
+                    <div class="chat-main">
+                        <div id="chatMainActiveNode" style="display: none; flex: 1; flex-direction: column;">
+                            <div class="chat-header">
+                                <div class="chat-partner-profile">
+                                    <img src="/static/images/default-avatar.png" id="chatHeaderAvatar" class="driver-mini-avatar"/>
+                                    <div>
+                                        <h4 id="chatHeaderName" style="font-family: var(--font-heading); font-size: 14px; font-weight: 700;">Name</h4>
+                                        <span id="chatHeaderUni" style="font-size: 11px; color: var(--text-muted);">University</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn btn-secondary btn-sm" id="chatBlockBtn"><i class="ri-forbid-line"></i> Block</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Messages bubbles container -->
+                            <div class="chat-body" id="chatBubblesNode">
+                                <!-- Loaded dynamically -->
+                            </div>
+
+                            <div class="chat-input-bar">
+                                <input type="text" class="chat-input-field" id="chatInputField" placeholder="Write a message..."/>
+                                <button class="btn btn-primary" id="chatSendBtn"><i class="ri-send-plane-2-line"></i></button>
+                            </div>
+                        </div>
+
+                        <!-- No conversation selected view -->
+                        <div class="no-chat-selected" id="chatMainPlaceholderNode">
+                            <i class="ri-message-3-fill"></i>
+                            <p>Select a student conversation to start discussing ride details.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 7. ID VERIFICATION & PROFILE -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-verification" class="verification-section" style="display: none;">
+                <div class="grid-cols-2" style="max-width: 900px; margin: 0 auto;">
+                    <!-- Verification submission card -->
+                    <div class="card">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 12px;"><i class="ri-verified-badge-line" style="color: var(--accent);"></i> Student ID Verification</h3>
+                        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 24px;">To protect the university community and verify driver eligibility, upload your student credential details.</p>
+                        
+                        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 20px; margin-bottom: 24px; text-align: center;">
+                            <div style="font-size: 14px; margin-bottom: 6px; font-weight: 700;">Status: <span id="verificationStatusBadgeText" class="report-status-badge pending">Unverified</span></div>
+                            <p style="font-size: 12px; color: var(--text-muted);" id="verificationStatusDesc">Your account is not verified. Submit student credentials to get a trusted checkmark.</p>
+                        </div>
+
+                        <div id="verificationFormNode">
+                            <div class="form-group">
+                                <label class="form-label">Student ID Details</label>
+                                <textarea class="form-input" id="verificationDocInput" rows="4" placeholder="Enter student card information e.g. Name, Student ID number, department, and graduation year to authenticate." required></textarea>
+                            </div>
+                            <button class="btn btn-primary" id="verificationSubmitBtn" style="width: 100%;">Submit Verification Document</button>
+                        </div>
+                    </div>
+
+                    <!-- Profile Settings card -->
+                    <div class="card">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-user-settings-line"></i> Profile Customizations</h3>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Avatar Icon</label>
+                            <div style="display: flex; gap: 10px;">
+                                <img src="/static/images/default-avatar.png" class="driver-mini-avatar" id="profileFormAvatarPreview" style="width: 48px; height: 48px; border-radius: 50%;"/>
+                                <select class="form-input" id="profileAvatarSelect">
+                                    <option value="/static/images/avatar-1.png">Indigo Driver Icon</option>
+                                    <option value="/static/images/avatar-2.png">Pink Student Icon</option>
+                                    <option value="/static/images/avatar-3.png">Green Car Icon</option>
+                                    <option value="/static/images/avatar-4.png">Yellow Star Icon</option>
+                                    <option value="/static/images/default-avatar.png">Default Grey Icon</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Contact Phone</label>
+                            <input type="text" class="form-input" id="profilePhoneField"/>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Emergency Safety Contact</label>
+                            <input type="text" class="form-input" id="profileEmergencyField"/>
+                        </div>
+                        <button class="btn btn-secondary" id="profileSaveBtn" style="width: 100%;">Save Changes</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 8. ADMIN DASHBOARD SCREEN -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-admin" class="admin-section" style="display: none;">
+                <div class="card" style="margin-bottom: 32px;">
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-shield-line" style="color: var(--accent);"></i> Moderation Queue & Reports</h3>
+                    <div class="admin-reports-grid" id="adminReportsNode">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom: 32px;">
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-user-search-line"></i> Verify Users and Students</h3>
+                    <div class="admin-reports-grid" id="adminVerificationRequestsNode">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+                <div class="card">
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-alarm-warning-line" style="color: var(--error);"></i> Active SOS Emergency Alerts</h3>
+                    <div class="admin-reports-grid" id="adminSOSNode">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- ---------------------------------------------------- -->
+    <!-- MODALS AND OVERLAYS -->
+    <!-- ---------------------------------------------------- -->
+    
+    <!-- A. RIDE DETAILED ROUTE & BOOKING OVERLAY -->
+    <div class="modal-overlay" id="rideDetailModal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h3 style="font-family: var(--font-heading); font-weight: 800;" id="modalRideTitle">Ride route overview</h3>
+                <button style="background: transparent; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" onclick="window.closeRideDetailModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="grid-cols-2" style="margin-bottom: 20px;">
+                    <!-- Details list -->
+                    <div>
+                        <div class="ride-card-header" style="margin-bottom: 20px;">
+                            <div class="ride-card-driver">
+                                <img src="/static/images/default-avatar.png" id="modalDriverAvatar" class="driver-mini-avatar" style="width:40px; height:40px;"/>
+                                <div class="driver-name-rating">
+                                    <span class="driver-name" id="modalDriverName" style="font-size: 14px;">Driver Name</span>
+                                    <span class="driver-rating" id="modalDriverRating">⭐ 5.0</span>
+                                </div>
+                            </div>
+                            <div class="ride-price" id="modalRidePrice">Rs. 150</div>
+                        </div>
+
+                        <div class="route-timeline" id="modalTimelineNode">
+                            <!-- Timeline stops -->
+                        </div>
+
+                        <div style="font-size: 12px; line-height: 1.6; margin-bottom: 16px; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                            <div><b>Vehicle details:</b> <span id="modalVehicleText">Tesla</span></div>
+                            <div id="modalVehiclePlateNode" style="display: none;"><b>Plate details:</b> <span id="modalVehiclePlateText">XXX</span></div>
+                            <div style="margin-top: 8px;"><b>Driver Carpool Notes:</b></div>
+                            <p id="modalNotesText" style="color: var(--text-muted); font-style: italic; margin-top: 4px;">None.</p>
+                        </div>
+                    </div>
+
+                    <!-- Mapping routes -->
+                    <div class="map-wrapper" style="height: 300px;">
+                        <div class="map-container" id="modalMapCanvas"></div>
+                    </div>
+                    <!-- Collapsible Directions Box for modal -->
+                    <div class="directions-guide-container" id="modalDirectionsGuide" style="margin-top: 10px; display: none;">
+                        <div class="directions-guide-header" onclick="const b = document.getElementById('modalDirectionsBody'); b.style.display = b.style.display === 'none' ? 'block' : 'none'">
+                            <span class="directions-guide-title"><i class="ri-navigation-line"></i> Turn-by-Turn Route Guidance</span>
+                            <i class="ri-arrow-down-s-line"></i>
+                        </div>
+                        <div class="directions-guide-body" id="modalDirectionsBody" style="display: block;">
+                            <div style="font-size: 11px; color: var(--text-muted); text-align: center; padding: 10px;">Loading directions...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Accepted passengers lists -->
+                <div style="border-top: 1px solid var(--border-color); padding-top: 16px; margin-bottom: 16px;">
+                    <h4 style="font-family: var(--font-heading); margin-bottom: 10px;">Approved Passengers</h4>
+                    <div id="modalPassengersListNode" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <!-- Passengers icons -->
+                    </div>
+                </div>
+
+                <!-- SOS Emergency display -->
+                <div id="modalSOSBannerNode" style="display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); padding: 16px; border-radius: var(--radius-sm); margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="color: var(--error); font-family: var(--font-heading);"><i class="ri-alarm-warning-line"></i> Emergency SOS Protocol</h4>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">If you face any threat, clicking the SOS button immediately alerts campus security and updates contacts.</p>
+                        </div>
+                        <button class="btn btn-danger btn-sm" id="modalSOSBtn">ACTIVATE SOS</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="modalReportDriverBtn"><i class="ri-flag-2-line"></i> Report User</button>
+                <button class="btn btn-secondary" id="modalChatBtn"><i class="ri-chat-3-line"></i> Chat with Driver</button>
+                <div id="modalBookingInteractionNode">
+                    <!-- Book Button or Booking info -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- B. SEAT BOOKING SELECTION MODAL -->
+    <div class="modal-overlay" id="bookingRequestModal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 style="font-family: var(--font-heading); font-weight: 700;">Request Seats</h3>
+                <button style="background: transparent; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" onclick="document.getElementById('bookingRequestModal').style.display = 'none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">How many seats do you want to book?</label>
+                    <select class="form-input" id="bookingSeatsSelect">
+                        <option value="1">1 Seat</option>
+                        <option value="2">2 Seats</option>
+                        <option value="3">3 Seats</option>
+                        <option value="4">4 Seats</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('bookingRequestModal').style.display = 'none'">Cancel</button>
+                <button class="btn btn-primary" id="bookingSubmitBtn">Request Booking</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- C. WRITE REVIEW MODAL -->
+    <div class="modal-overlay" id="reviewModal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3 style="font-family: var(--font-heading); font-weight: 700;">Rate & Review Commuter</h3>
+                <button style="background: transparent; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" onclick="document.getElementById('reviewModal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="text-align: center;">
+                    <label class="form-label">Commuter Rating</label>
+                    <div style="display: flex; gap: 16px; justify-content: center; font-size: 32px; margin: 12px 0;">
+                        <i class="ri-star-line star-review-icon" data-val="1" style="cursor: pointer; color: var(--text-muted);"></i>
+                        <i class="ri-star-line star-review-icon" data-val="2" style="cursor: pointer; color: var(--text-muted);"></i>
+                        <i class="ri-star-line star-review-icon" data-val="3" style="cursor: pointer; color: var(--text-muted);"></i>
+                        <i class="ri-star-line star-review-icon" data-val="4" style="cursor: pointer; color: var(--text-muted);"></i>
+                        <i class="ri-star-line star-review-icon" data-val="5" style="cursor: pointer; color: var(--text-muted);"></i>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Review comments</label>
+                    <textarea class="form-input" id="reviewCommentInput" rows="3" placeholder="Tell other students about your ride experience..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('reviewModal').style.display='none'">Cancel</button>
+                <button class="btn btn-primary" id="reviewSubmitBtn">Submit Review</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- D. REPORT USER MODAL -->
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3 style="font-family: var(--font-heading); font-weight: 700;">Report Safety / Conduct Issue</h3>
+                <button style="background: transparent; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" onclick="document.getElementById('reportModal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Reason for Report</label>
+                    <select class="form-input" id="reportReasonSelect">
+                        <option value="Dangerous Driving">Dangerous Driving</option>
+                        <option value="No-Show / Late">No-Show / Late</option>
+                        <option value="Inappropriate Conduct">Inappropriate Conduct / Harassment</option>
+                        <option value="Unsafe Vehicle">Unsafe Vehicle Condition</option>
+                        <option value="Inaccurate Carpool Info">Inaccurate Price / Route Description</option>
+                        <option value="Other">Other Reason</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Detailed complaint</label>
+                    <textarea class="form-input" id="reportDetailsInput" rows="4" placeholder="Provide full context, including times, pricing arguments, or safety violations. Admins will investigate." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('reportModal').style.display='none'">Cancel</button>
+                <button class="btn btn-danger" id="reportSubmitBtn">Submit Complaint</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- E. Emergency SOS triggered overlay screen -->
+    <div class="modal-overlay" id="emergencyActiveModal" style="background: rgba(239, 68, 68, 0.95); backdrop-filter: blur(12px);">
+        <div class="modal-content" style="max-width: 500px; border-color: white; text-align: center; padding: 40px 24px;">
+            <div style="font-size: 64px; color: var(--error); animation: pulse 1s infinite; margin-bottom: 20px;">
+                <i class="ri-alarm-warning-fill" style="color: white;"></i>
+            </div>
+            <h2 style="font-family: var(--font-heading); font-weight: 800; color: white; margin-bottom: 8px;">EMERGENCY SOS ACTIVE</h2>
+            <p style="color: #fca5a5; font-size: 14px; margin-bottom: 24px; line-height: 1.6;">
+                Campus Security dispatch has been notified of your exact GPS coordinates. A text alert has been sent to your emergency contact.
+            </p>
+            
+            <div style="background: rgba(0,0,0,0.2); padding: 16px; border-radius: 8px; font-size: 13px; text-align: left; margin-bottom: 24px; line-height: 1.6;">
+                <div><b>Student:</b> <span id="sosStudentVal">name</span></div>
+                <div><b>Emergency dispatch status:</b> <span style="color:#34d399; font-weight:bold;">En-route</span></div>
+                <div style="margin-top: 8px;"><b>Campus Security Hotline:</b></div>
+                <div style="font-size: 18px; font-weight: 800; color: white;">+1 (555) 911-SAFE</div>
+            </div>
+
+            <button class="btn btn-secondary" style="width: 100%; border-color: rgba(255,255,255,0.3);" onclick="document.getElementById('emergencyActiveModal').style.display='none'">Dismiss Alert</button>
+        </div>
+    </div>
+
+    <!-- Floating notifications tray -->
+    <div class="toast-stack" id="toastStackNode"></div>
+
+    <!-- Smart Commute AI Copilot -->
+    <div id="aiCopilotWidget" class="ai-copilot-widget" style="display: none;">
+        <!-- Floating Toggle Button -->
+        <button id="aiCopilotToggleBtn" class="ai-copilot-toggle-btn">
+            <i class="ri-robot-2-line"></i>
+            <span class="pulse-indicator"></span>
+        </button>
+        
+        <!-- Expanded Chat Box -->
+        <div id="aiCopilotChatBox" class="ai-copilot-chat-box" style="display: none;">
+            <div class="ai-copilot-header">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="ai-avatar"><i class="ri-robot-2-fill"></i></div>
+                    <div>
+                        <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: white;">CampusRide AI Copilot</h4>
+                        <span style="font-size: 10px; color: #a5f3fc; display: flex; align-items: center; gap: 4px;">
+                            <span class="online-dot"></span> Active
+                        </span>
+                    </div>
+                </div>
+                <button id="aiCopilotCloseBtn" class="close-btn">&times;</button>
+            </div>
+            <div class="ai-copilot-body" id="aiCopilotBodyNode">
+                <div class="ai-msg bot">
+                    Hello! I'm your CampusRide AI Assistant. How can I help optimize your commute today?
+                </div>
+                <div class="ai-quick-options">
+                    <button class="quick-opt-btn" data-query="price_explain">
+                        <i class="ri-scales-3-line"></i>
+                        <span>Explain AI Pricing</span>
+                    </button>
+                    <button class="quick-opt-btn" data-query="draft_request">
+                        <i class="ri-file-list-3-line"></i>
+                        <span>Draft Request Message</span>
+                    </button>
+                    <button class="quick-opt-btn" data-query="safety_tips">
+                        <i class="ri-shield-user-line"></i>
+                        <span>Safety Guidelines</span>
+                    </button>
+                    <button class="quick-opt-btn" data-query="verify_help">
+                        <i class="ri-key-2-line"></i>
+                        <span>Verification Guide</span>
+                    </button>
+                </div>
+            </div>
+            <div class="ai-copilot-input-bar">
+                <input type="text" id="aiCopilotInputField" placeholder="Ask about routes, pricing, safety..."/>
+                <button id="aiCopilotSendBtn"><i class="ri-send-plane-2-line"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet mapping library JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- App Scripts -->
+    <script src="/static/js/api.js?v=1.3"></script>
+    <script src="/static/js/map.js?v=1.3"></script>
+    <script src="/static/js/app.js?v=1.3"></script>
+
+</body>
+</html>
