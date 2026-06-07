@@ -239,57 +239,5 @@ const API = {
         return this.request(`/api/bookings/${bookingId}/complete/`, {
             method: 'POST'
         });
-    },
-
-    // 8. GPS Location Operations
-    async updateRideLocation(rideId, lat, lng) {
-        return this.request(`/api/rides/${rideId}/location/update/`, {
-            method: 'POST',
-            body: JSON.stringify({ lat, lng })
-        });
-    },
-
-    async getRideLocation(rideId) {
-        return this.request(`/api/rides/${rideId}/location/`);
-    },
-
-    // 9. AI Timetable Ride Matching Operations
-    async getTimetables() {
-        return this.request('/api/timetable/');
-    },
-
-    async addTimetable(timetableData) {
-        return this.request('/api/timetable/', {
-            method: 'POST',
-            body: JSON.stringify(timetableData)
-        });
-    },
-
-    async updateTimetable(timetableId, timetableData) {
-        return this.request(`/api/timetable/${timetableId}/`, {
-            method: 'PUT',
-            body: JSON.stringify(timetableData)
-        });
-    },
-
-    async deleteTimetable(timetableId) {
-        return this.request(`/api/timetable/${timetableId}/`, {
-            method: 'DELETE'
-        });
-    },
-
-    async getTimetableMatches(timetableId) {
-        return this.request(`/api/timetable/matches/?timetable_id=${timetableId}`);
-    },
-
-    async createRecurringRideFromTimetable(timetableId, rideDetails) {
-        return this.request('/api/timetable/create-recurring-ride/', {
-            method: 'POST',
-            body: JSON.stringify({
-                timetable_id: timetableId,
-                ...rideDetails
-            })
-        });
     }
 };
-

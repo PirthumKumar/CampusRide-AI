@@ -32,13 +32,25 @@ urlpatterns = [
     path('api/me/', views.me_view, name='api_me'),
     path('api/verify-profile/', views.verify_profile_view, name='api_verify_profile'),
 
+    # Timetable Matching Feature API Endpoints
+    path('api/timetable/', views.timetable_list_create_view, name='api_timetable_list_create'),
+    path('api/timetable/<int:pk>/', views.timetable_detail_update_delete_view, name='api_timetable_detail_update_delete'),
+    path('api/timetable/matches/', views.timetable_matches_view, name='api_timetable_matches'),
+    path('api/timetable/create-recurring-ride/', views.timetable_create_recurring_ride_view, name='api_timetable_create_recurring_ride'),
+
+
     path('api/rides/', views.rides_view, name='api_rides'),
     path('api/rides/<int:pk>/', views.ride_detail_view, name='api_ride_detail'),
     path('api/rides/price-predict/', views.price_predict_view, name='api_price_predict'),
     path('api/rides/matching/', views.rides_matching_view, name='api_rides_matching'),
+    path('api/rides/<int:pk>/location/update/', views.update_ride_location_view, name='api_update_ride_location'),
+    path('api/rides/<int:pk>/location/', views.get_ride_location_view, name='api_get_ride_location'),
 
     path('api/bookings/', views.bookings_view, name='api_bookings'),
     path('api/bookings/<int:pk>/action/', views.booking_action_view, name='api_booking_action'),
+    path('api/bookings/<int:pk>/verify-pin/', views.verify_ride_pin_view, name='api_verify_ride_pin'),
+    path('api/bookings/verify-qr/', views.verify_ride_qr_view, name='api_verify_ride_qr'),
+    path('api/bookings/<int:pk>/complete/', views.complete_ride_view, name='api_complete_ride'),
 
     path('api/chat/messages/', views.chat_messages_view, name='api_chat_messages'),
     path('api/chat/conversations/', views.chat_conversations_view, name='api_chat_conversations'),

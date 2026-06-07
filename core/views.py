@@ -10,17 +10,21 @@ from django.db.models import Q, Max
 from django.utils import timezone
 from datetime import datetime, date
 
-from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent
+from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent, RideLocation, Timetable
 from .serializers import (UserSerializer, UserMinSerializer, RegisterSerializer, RideSerializer, 
                             BookingSerializer, MessageSerializer, NotificationSerializer, 
-                            ReviewSerializer, ReportSerializer, SOSEventSerializer)
+                            ReviewSerializer, ReportSerializer, SOSEventSerializer, TimetableSerializer)
 from .pricing import get_price_prediction
-from .matching import check_route_match, optimize_driver_route, haversine_distance
+from .matching import (check_route_match, optimize_driver_route, haversine_distance, 
+                       calculate_timetable_match_score, calculate_ride_timetable_match_score)
+
 
 # Serve the HTML Single Page Application
 @ensure_csrf_cookie
 def index_view(request):
     return render(request, 'core/index.html')
+
+
 
 
 @csrf_exempt
@@ -327,12 +331,12 @@ def bookings_view(request):
         if request.user.role == 'external_driver':
             return Response({
                 'my_bookings': [],
-                'received_requests': BookingSerializer(d_bookings, many=True).data
+                'received_requests': BookingSerializer(d_bookings, many=True, context={'request': request}).data
             })
             
         return Response({
-            'my_bookings': BookingSerializer(p_bookings, many=True).data,
-            'received_requests': BookingSerializer(d_bookings, many=True).data
+            'my_bookings': BookingSerializer(p_bookings, many=True, context={'request': request}).data,
+            'received_requests': BookingSerializer(d_bookings, many=True, context={'request': request}).data
         })
         
     elif request.method == 'POST':
@@ -375,7 +379,7 @@ def bookings_view(request):
             related_id=booking.id
         )
         
-        return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
+        return Response(BookingSerializer(booking, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
 @csrf_exempt
@@ -400,7 +404,12 @@ def booking_action_view(request, pk):
         if ride.seats_available < booking.seats_booked:
             return Response({'error': 'Not enough seats available to approve this booking'}, status=status.HTTP_400_BAD_REQUEST)
             
+        import random
+        import uuid
         booking.status = 'approved'
+        booking.verification_pin = "".join([str(random.randint(0, 9)) for _ in range(6)])
+        booking.verification_token = uuid.uuid4().hex
+        booking.ride_status = 'confirmed'
         booking.save()
         
         ride.seats_available -= booking.seats_booked
@@ -443,6 +452,9 @@ def booking_action_view(request, pk):
             
         original_status = booking.status
         booking.status = 'cancelled'
+        booking.verification_pin = None
+        booking.verification_token = None
+        booking.ride_status = 'cancelled'
         booking.save()
         
         # If was approved, restore seats
@@ -467,7 +479,7 @@ def booking_action_view(request, pk):
     else:
         return Response({'error': "Invalid action. Choose 'approve', 'reject', or 'cancel'"}, status=status.HTTP_400_BAD_REQUEST)
         
-    return Response(BookingSerializer(booking).data)
+    return Response(BookingSerializer(booking, context={'request': request}).data)
 
 
 @csrf_exempt
@@ -923,4 +935,426 @@ def resolve_sos_admin(request, pk):
     event.status = 'resolved'
     event.save()
     return Response(SOSEventSerializer(event).data)
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_ride_pin_view(request, pk):
+    """
+    Validates a ride booking verification PIN entered manually by the driver.
+    Transitions the ride status to 'started'.
+    """
+    try:
+        booking = Booking.objects.get(pk=pk)
+    except Booking.DoesNotExist:
+        return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Security check: Only the assigned driver is allowed to verify
+    if booking.ride.driver != request.user:
+        return Response({'error': 'Only the assigned driver can verify this ride'}, status=status.HTTP_403_FORBIDDEN)
+
+    pin = request.data.get('pin')
+    if not pin or booking.verification_pin != pin:
+        return Response({'error': 'Invalid PIN or QR code'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Prevent double-verification
+    if booking.is_verified:
+        return Response({'error': 'Ride has already been verified'}, status=status.HTTP_400_BAD_REQUEST)
+
+    booking.is_verified = True
+    booking.verified_at = timezone.now()
+    booking.ride_status = 'started'
+    booking.save()
+
+    # Notify Passenger that the ride has started
+    Notification.objects.create(
+        user=booking.passenger,
+        title="Ride Started",
+        content=f"Your ride with {booking.ride.driver.username} has been verified and has started.",
+        notification_type="ride_update",
+        related_id=booking.id
+    )
+
+    return Response({
+        'message': 'Ride verified successfully',
+        'booking': BookingSerializer(booking, context={'request': request}).data
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_ride_qr_view(request):
+    """
+    Validates a ride booking verification secure QR token scanned by the driver.
+    Transitions the ride status to 'started'.
+    """
+    token = request.data.get('token')
+    if not token:
+        return Response({'error': 'Token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        booking = Booking.objects.get(verification_token=token)
+    except Booking.DoesNotExist:
+        return Response({'error': 'Invalid PIN or QR code'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Security check: Only the assigned driver is allowed to verify
+    if booking.ride.driver != request.user:
+        return Response({'error': 'Only the assigned driver can verify this ride'}, status=status.HTTP_403_FORBIDDEN)
+
+    # Prevent double-verification
+    if booking.is_verified:
+        return Response({'error': 'Ride has already been verified'}, status=status.HTTP_400_BAD_REQUEST)
+
+    booking.is_verified = True
+    booking.verified_at = timezone.now()
+    booking.ride_status = 'started'
+    booking.save()
+
+    # Notify Passenger that the ride has started
+    Notification.objects.create(
+        user=booking.passenger,
+        title="Ride Started",
+        content=f"Your ride with {booking.ride.driver.username} has been verified and has started.",
+        notification_type="ride_update",
+        related_id=booking.id
+    )
+
+    return Response({
+        'message': 'Ride verified successfully',
+        'booking': BookingSerializer(booking, context={'request': request}).data
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def complete_ride_view(request, pk):
+    """
+    Marks a verified/started ride booking as completed.
+    Expires/clears the PIN and token.
+    """
+    try:
+        booking = Booking.objects.get(pk=pk)
+    except Booking.DoesNotExist:
+        return Response({'error': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Security check: Only the assigned driver is allowed to complete the ride
+    if booking.ride.driver != request.user:
+        return Response({'error': 'Only the assigned driver can complete this ride'}, status=status.HTTP_403_FORBIDDEN)
+
+    if booking.ride_status != 'started':
+        return Response({'error': 'Only started rides can be completed'}, status=status.HTTP_400_BAD_REQUEST)
+
+    booking.ride_status = 'completed'
+    # PIN/QR expires after completed
+    booking.verification_pin = None
+    booking.verification_token = None
+    booking.save()
+
+    # Notify Passenger that the ride has completed
+    Notification.objects.create(
+        user=booking.passenger,
+        title="Ride Completed",
+        content=f"Your ride with {booking.ride.driver.username} has been completed.",
+        notification_type="ride_update",
+        related_id=booking.id
+    )
+
+    return Response({
+        'message': 'Ride completed successfully',
+        'booking': BookingSerializer(booking, context={'request': request}).data
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_ride_location_view(request, pk):
+    """
+    Updates the live GPS coordinates of the driver for an active ride.
+    Only the ride's driver is allowed to call this.
+    """
+    try:
+        ride = Ride.objects.get(pk=pk)
+    except Ride.DoesNotExist:
+        return Response({'error': 'Ride not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Security check: Only the ride's driver can update the location
+    if ride.driver != request.user:
+        return Response({'error': 'Only the assigned driver can update location'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        lat = float(request.data.get('lat'))
+        lng = float(request.data.get('lng'))
+    except (TypeError, ValueError):
+        return Response({'error': 'Invalid latitude or longitude format'}, status=status.HTTP_400_BAD_REQUEST)
+
+    loc, created = RideLocation.objects.get_or_create(
+        ride=ride,
+        driver=request.user,
+        defaults={'latitude': lat, 'longitude': lng}
+    )
+    if not created:
+        loc.latitude = lat
+        loc.longitude = lng
+        loc.save()
+
+    return Response({
+        'status': 'ok',
+        'lat': loc.latitude,
+        'lng': loc.longitude
+    })
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_ride_location_view(request, pk):
+    """
+    Retrieves the latest live location of the driver for a ride.
+    """
+    try:
+        ride = Ride.objects.get(pk=pk)
+    except Ride.DoesNotExist:
+        return Response({'error': 'Ride not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    loc = RideLocation.objects.filter(ride=ride).order_by('-updated_at').first()
+    if loc:
+        return Response({
+            'lat': loc.latitude,
+            'lng': loc.longitude,
+            'updated_at': loc.updated_at
+        })
+    return Response({'lat': None})
+
+
+@csrf_exempt
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def timetable_list_create_view(request):
+    """
+    List user timetable entries or create a new one.
+    """
+    if request.user.verification_status != 'verified':
+        return Response({'error': 'Only verified students can access timetable ride matching'}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'GET':
+        entries = Timetable.objects.filter(student=request.user)
+        serializer = TimetableSerializer(entries, many=True, context={'request': request})
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = TimetableSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save(student_id=request.user.id)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@csrf_exempt
+@api_view(['GET', 'PUT', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def timetable_detail_update_delete_view(request, pk):
+    """
+    Retrieve, update, or delete a timetable entry.
+    """
+    if request.user.verification_status != 'verified':
+        return Response({'error': 'Only verified students can access timetable ride matching'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        entry = Timetable.objects.get(pk=pk, student=request.user)
+    except Timetable.DoesNotExist:
+        return Response({'error': 'Timetable entry not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        serializer = TimetableSerializer(entry, context={'request': request})
+        return Response(serializer.data)
+
+    elif request.method == 'PUT':
+        serializer = TimetableSerializer(entry, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        entry.delete()
+        return Response({'message': 'Timetable entry deleted successfully'}, status=status.HTTP_204_NO_CONTENT)
+
+
+@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def timetable_matches_view(request):
+    """
+    Matches timetable schedules with available driver rides and other students.
+    """
+    if request.user.verification_status != 'verified':
+        return Response({'error': 'Only verified students can access timetable ride matching'}, status=status.HTTP_403_FORBIDDEN)
+
+    timetable_id = request.query_params.get('timetable_id')
+    if not timetable_id:
+        return Response({'error': 'timetable_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        timetable = Timetable.objects.get(pk=timetable_id, student=request.user)
+    except Timetable.DoesNotExist:
+        return Response({'error': 'Timetable entry not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # 1. Match with upcoming driver rides
+    blocked_ids = list(BlockedUser.objects.filter(blocker=request.user).values_list('blocked_id', flat=True))
+    blocked_by_ids = list(BlockedUser.objects.filter(blocked=request.user).values_list('blocker_id', flat=True))
+    exclude_user_ids = set(blocked_ids + blocked_by_ids + [request.user.id])
+
+    candidate_rides = Ride.objects.exclude(driver_id__in=exclude_user_ids).filter(seats_available__gt=0)
+    
+    matched_rides = []
+    for ride in candidate_rides:
+        is_match, score = calculate_ride_timetable_match_score(ride, timetable)
+        if is_match:
+            ride_data = RideSerializer(ride, context={'request': request}).data
+            matched_rides.append({
+                'ride': ride_data,
+                'match_score': score
+            })
+
+    matched_rides.sort(key=lambda x: x['match_score'], reverse=True)
+
+    # 2. Match with other student schedules
+    candidate_timetables = Timetable.objects.exclude(student_id__in=exclude_user_ids)
+    
+    matched_students = []
+    for ct in candidate_timetables:
+        is_match, score = calculate_timetable_match_score(timetable, ct)
+        if is_match:
+            student_data = UserMinSerializer(ct.student).data
+            matched_students.append({
+                'timetable_id': ct.id,
+                'student': student_data,
+                'course_name': ct.course_name,
+                'day_of_week': ct.day_of_week,
+                'class_start_time': ct.class_start_time.strftime('%H:%M'),
+                'preferred_departure_time': ct.preferred_departure_time.strftime('%H:%M'),
+                'pickup_name': ct.pickup_name,
+                'dropoff_name': ct.dropoff_name,
+                'match_score': score
+            })
+
+    matched_students.sort(key=lambda x: x['match_score'], reverse=True)
+
+    # 3. Recommendations
+    student_count = len(matched_students)
+    
+    # Calculate recommended departure time by estimating travel duration (Avg speed 30 km/h + 15 min buffer)
+    dist_route = haversine_distance(timetable.pickup_lat, timetable.pickup_lng, timetable.dropoff_lat, timetable.dropoff_lng)
+    est_travel_time_mins = int((dist_route / 30.0) * 60) + 15
+    class_start_mins = timetable.class_start_time.hour * 60 + timetable.class_start_time.minute
+    rec_dept_mins = class_start_mins - est_travel_time_mins
+    
+    if rec_dept_mins < 0:
+        rec_dept_mins += 24 * 60
+        
+    rec_hour = (rec_dept_mins // 60) % 24
+    rec_min = rec_dept_mins % 60
+    
+    from datetime import time
+    rec_time_obj = time(hour=rec_hour, minute=rec_min)
+    recommended_departure = rec_time_obj.strftime('%I:%M %p')
+
+    if student_count > 0:
+        recommendation_text = f"We recommend departing at {recommended_departure}. {student_count} student(s) near your area are going to {timetable.dropoff_name} around the same time. Create a shared ride?"
+    else:
+        recommendation_text = f"No classmate matches found yet. We recommend departing at {recommended_departure} to reach class on time."
+
+    return Response({
+        'timetable': TimetableSerializer(timetable, context={'request': request}).data,
+        'matched_rides': matched_rides,
+        'matched_students': matched_students,
+        'recommended_departure_time': recommended_departure,
+        'recommendation_message': recommendation_text
+    })
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def timetable_create_recurring_ride_view(request):
+    """
+    Creates a recurring Ride from a student timetable schedule.
+    """
+    if request.user.verification_status != 'verified':
+        return Response({'error': 'Only verified students can access timetable ride matching'}, status=status.HTTP_403_FORBIDDEN)
+
+    timetable_id = request.data.get('timetable_id')
+    price_per_seat = request.data.get('price_per_seat')
+    vehicle_model = request.data.get('vehicle_model')
+    vehicle_plate = request.data.get('vehicle_plate')
+    vehicle_type = request.data.get('vehicle_type', 'car')
+    seats_total = request.data.get('seats_total', 4)
+    notes = request.data.get('notes', '')
+
+    if not all([timetable_id, price_per_seat, vehicle_model, vehicle_plate]):
+        return Response({'error': 'Missing required fields: timetable_id, price_per_seat, vehicle_model, vehicle_plate'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        timetable = Timetable.objects.get(pk=timetable_id, student=request.user)
+    except Timetable.DoesNotExist:
+        return Response({'error': 'Timetable entry not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    from django.utils import timezone
+    import datetime
+    
+    day_map = {
+        'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+        'friday': 4, 'saturday': 5, 'sunday': 6
+    }
+    target_weekday = day_map.get(timetable.day_of_week.strip().lower(), 0)
+    
+    current_date = timezone.now().date()
+    current_weekday = current_date.weekday()
+    
+    days_ahead = target_weekday - current_weekday
+    if days_ahead < 0:
+        days_ahead += 7
+    elif days_ahead == 0:
+        now_time = timezone.now().time()
+        if timetable.preferred_departure_time < now_time:
+            days_ahead = 7
+            
+    ride_date = current_date + datetime.timedelta(days=days_ahead)
+
+    ride = Ride.objects.create(
+        driver=request.user,
+        pickup_name=timetable.pickup_name,
+        pickup_lat=timetable.pickup_lat,
+        pickup_lng=timetable.pickup_lng,
+        dropoff_name=timetable.dropoff_name,
+        dropoff_lat=timetable.dropoff_lat,
+        dropoff_lng=timetable.dropoff_lng,
+        date=ride_date,
+        time=timetable.preferred_departure_time,
+        seats_total=int(seats_total),
+        seats_available=int(seats_total),
+        price_per_seat=price_per_seat,
+        vehicle_model=vehicle_model,
+        vehicle_plate=vehicle_plate,
+        vehicle_type=vehicle_type,
+        notes=notes,
+        is_recurring=True,
+        recurring_days=timetable.day_of_week
+    )
+
+    Notification.objects.create(
+        user=request.user,
+        title="Recurring Ride Created",
+        content=f"Your recurring ride for every {timetable.day_of_week} at {timetable.preferred_departure_time.strftime('%I:%M %p')} has been created.",
+        notification_type="ride_update",
+        related_id=ride.id
+    )
+
+    return Response(RideSerializer(ride, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+
 

@@ -191,19 +191,19 @@ class RBACTests(TestCase):
             driver=self.student,
             pickup_name="Student pickup", pickup_lat=33.6428, pickup_lng=72.9904,
             dropoff_name="Student dropoff", dropoff_lat=33.6500, dropoff_lng=73.0000,
-            date="2026-06-01", time="08:00:00", price_per_seat=100.0, vehicle_model="Civic", vehicle_plate="123"
+            date=date.today(), time="08:00:00", price_per_seat=100.0, vehicle_model="Civic", vehicle_plate="123"
         )
         self.ride_verified_driver = Ride.objects.create(
             driver=self.driver_verified,
             pickup_name="Verified pickup", pickup_lat=33.6428, pickup_lng=72.9904,
             dropoff_name="Verified dropoff", dropoff_lat=33.6500, dropoff_lng=73.0000,
-            date="2026-06-01", time="09:00:00", price_per_seat=120.0, vehicle_model="Corolla", vehicle_plate="456"
+            date=date.today(), time="09:00:00", price_per_seat=120.0, vehicle_model="Corolla", vehicle_plate="456"
         )
         self.ride_unverified_driver = Ride.objects.create(
             driver=self.driver_unverified,
             pickup_name="Unverified pickup", pickup_lat=33.6428, pickup_lng=72.9904,
             dropoff_name="Unverified dropoff", dropoff_lat=33.6500, dropoff_lng=73.0000,
-            date="2026-06-01", time="10:00:00", price_per_seat=150.0, vehicle_model="Mehran", vehicle_plate="789"
+            date=date.today(), time="10:00:00", price_per_seat=150.0, vehicle_model="Mehran", vehicle_plate="789"
         )
 
     def test_registration_with_role(self):
@@ -227,7 +227,7 @@ class RBACTests(TestCase):
         payload = {
             "pickup_name": "NUST", "pickup_lat": 33.6428, "pickup_lng": 72.9904,
             "dropoff_name": "Faisal Mosque", "dropoff_lat": 33.7297, "dropoff_lng": 73.0372,
-            "date": "2026-06-01", "time": "08:00:00", "seats_total": 4, "price_per_seat": 150.0,
+            "date": date.today().isoformat(), "time": "08:00:00", "seats_total": 4, "price_per_seat": 150.0,
             "vehicle_model": "Suzuki WagonR", "vehicle_plate": "LED-1234"
         }
         response = self.client.post("/api/rides/", payload, format="json")
@@ -238,7 +238,7 @@ class RBACTests(TestCase):
         payload = {
             "pickup_name": "NUST", "pickup_lat": 33.6428, "pickup_lng": 72.9904,
             "dropoff_name": "Faisal Mosque", "dropoff_lat": 33.7297, "dropoff_lng": 73.0372,
-            "date": "2026-06-01", "time": "08:00:00", "seats_total": 4, "price_per_seat": 150.0,
+            "date": date.today().isoformat(), "time": "08:00:00", "seats_total": 4, "price_per_seat": 150.0,
             "vehicle_model": "Suzuki WagonR", "vehicle_plate": "LED-1234"
         }
         response = self.client.post("/api/rides/", payload, format="json")
@@ -300,7 +300,7 @@ class RBACTests(TestCase):
             "dropoff_name": "Faisal Mosque Parking",
             "dropoff_address_details": "Beside administrative block",
             "dropoff_lat": 33.7297, "dropoff_lng": 73.0372,
-            "date": "2026-06-01", "time": "08:00:00", "seats_total": 1, "price_per_seat": 100.0,
+            "date": date.today().isoformat(), "time": "08:00:00", "seats_total": 1, "price_per_seat": 100.0,
             "vehicle_model": "Honda CD 70", "vehicle_plate": "LED-1234", "vehicle_type": "motorbike"
         }
         response = self.client.post("/api/rides/", payload, format="json")
@@ -368,5 +368,182 @@ class SOSEmergencyTests(TestCase):
         # Verify status updated
         event.refresh_from_db()
         self.assertEqual(event.status, "resolved")
+
+
+class VerificationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.User = get_user_model()
+        
+        # Create users
+        self.driver = self.User.objects.create_user(username="driver_v", email="driver_v@test.com", password="password123", role="external_driver", verification_status="verified")
+        self.passenger = self.User.objects.create_user(username="passenger_v", email="pass_v@test.com", password="password123", role="student")
+        self.other_user = self.User.objects.create_user(username="other_v", email="other_v@test.com", password="password123", role="student")
+        
+        # Create ride
+        self.ride = Ride.objects.create(
+            driver=self.driver,
+            pickup_name="NUST", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="Faisal Mosque", dropoff_lat=33.7297, dropoff_lng=73.0372,
+            date=date.today(), time="08:00:00", price_per_seat=100.0, vehicle_model="Civic", vehicle_plate="123"
+        )
+        
+        # Create booking
+        self.booking = Booking.objects.create(
+            ride=self.ride,
+            passenger=self.passenger,
+            seats_booked=1,
+            status="pending"
+        )
+
+    def test_booking_approval_generates_pin_and_token(self):
+        self.client.force_authenticate(user=self.driver)
+        response = self.client.post(f"/api/bookings/{self.booking.id}/action/", {"action": "approve"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, "approved")
+        self.assertEqual(self.booking.ride_status, "confirmed")
+        self.assertIsNotNone(self.booking.verification_pin)
+        self.assertEqual(len(self.booking.verification_pin), 6)
+        self.assertIsNotNone(self.booking.verification_token)
+        self.assertEqual(len(self.booking.verification_token), 32) # hex uuid
+
+    def test_visibility_restrictions_on_verification_fields(self):
+        # Approve first
+        self.client.force_authenticate(user=self.driver)
+        self.client.post(f"/api/bookings/{self.booking.id}/action/", {"action": "approve"}, format="json")
+        
+        # Passenger should be able to see PIN and token
+        self.client.force_authenticate(user=self.passenger)
+        response = self.client.get("/api/bookings/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        booking_data = [b for b in response.data["my_bookings"] if b["id"] == self.booking.id][0]
+        self.assertIn("verification_pin", booking_data)
+        self.assertIn("verification_token", booking_data)
+        
+        # Driver should NOT see PIN in serialization representation (but sees token for scanning)
+        self.client.force_authenticate(user=self.driver)
+        response = self.client.get("/api/bookings/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        booking_data = [b for b in response.data["received_requests"] if b["id"] == self.booking.id][0]
+        self.assertNotIn("verification_pin", booking_data)
+        self.assertIn("verification_token", booking_data)
+
+    def test_verify_pin_success(self):
+        # Approve booking
+        self.client.force_authenticate(user=self.driver)
+        self.client.post(f"/api/bookings/{self.booking.id}/action/", {"action": "approve"}, format="json")
+        self.booking.refresh_from_db()
+        
+        # Driver enters correct PIN
+        response = self.client.post(f"/api/bookings/{self.booking.id}/verify-pin/", {"pin": self.booking.verification_pin}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.booking.refresh_from_db()
+        self.assertTrue(self.booking.is_verified)
+        self.assertEqual(self.booking.ride_status, "started")
+
+    def test_verify_pin_unauthorized_driver(self):
+        # Approve booking
+        self.client.force_authenticate(user=self.driver)
+        self.client.post(f"/api/bookings/{self.booking.id}/action/", {"action": "approve"}, format="json")
+        self.booking.refresh_from_db()
+        
+        # Another user/driver attempts to verify PIN
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.post(f"/api/bookings/{self.booking.id}/verify-pin/", {"pin": self.booking.verification_pin}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_verify_qr_success(self):
+        # Approve booking
+        self.client.force_authenticate(user=self.driver)
+        self.client.post(f"/api/bookings/{self.booking.id}/action/", {"action": "approve"}, format="json")
+        self.booking.refresh_from_db()
+        
+        # Driver scans correct token
+        response = self.client.post("/api/bookings/verify-qr/", {"token": self.booking.verification_token}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.booking.refresh_from_db()
+        self.assertTrue(self.booking.is_verified)
+        self.assertEqual(self.booking.ride_status, "started")
+
+    def test_complete_ride_expires_credentials(self):
+        # Approve and verify ride first
+        self.client.force_authenticate(user=self.driver)
+        self.client.post(f"/api/bookings/{self.booking.id}/action/", {"action": "approve"}, format="json")
+        self.booking.refresh_from_db()
+        self.client.post(f"/api/bookings/{self.booking.id}/verify-pin/", {"pin": self.booking.verification_pin}, format="json")
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.ride_status, "started")
+        
+        # Driver completes ride
+        response = self.client.post(f"/api/bookings/{self.booking.id}/complete/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.ride_status, "completed")
+        self.assertIsNone(self.booking.verification_pin)
+        self.assertIsNone(self.booking.verification_token)
+
+
+class GPSTrackingTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.User = get_user_model()
+        
+        # Create users
+        self.driver = self.User.objects.create_user(username="driver_gps", email="driver_gps@test.com", password="password123", role="external_driver", verification_status="verified")
+        self.passenger = self.User.objects.create_user(username="passenger_gps", email="pass_gps@test.com", password="password123", role="student")
+        self.other_user = self.User.objects.create_user(username="other_gps", email="other_gps@test.com", password="password123", role="student")
+        
+        # Create ride
+        self.ride = Ride.objects.create(
+            driver=self.driver,
+            pickup_name="NUST", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="Faisal Mosque", dropoff_lat=33.7297, dropoff_lng=73.0372,
+            date=date.today(), time="08:00:00", price_per_seat=100.0, vehicle_model="Civic", vehicle_plate="123"
+        )
+        
+        # Create booking
+        self.booking = Booking.objects.create(
+            ride=self.ride,
+            passenger=self.passenger,
+            seats_booked=1,
+            status="approved",
+            ride_status="started"
+        )
+
+    def test_driver_can_update_ride_location(self):
+        self.client.force_authenticate(user=self.driver)
+        response = self.client.post(f"/api/rides/{self.ride.id}/location/update/", {"lat": 33.6450, "lng": 72.9920}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "ok")
+        self.assertEqual(response.data["lat"], 33.6450)
+        self.assertEqual(response.data["lng"], 72.9920)
+
+    def test_passenger_can_get_ride_location(self):
+        # Driver updates location first
+        self.client.force_authenticate(user=self.driver)
+        self.client.post(f"/api/rides/{self.ride.id}/location/update/", {"lat": 33.6450, "lng": 72.9920}, format="json")
+        
+        # Passenger gets location
+        self.client.force_authenticate(user=self.passenger)
+        response = self.client.get(f"/api/rides/{self.ride.id}/location/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["lat"], 33.6450)
+        self.assertEqual(response.data["lng"], 72.9920)
+
+    def test_other_user_cannot_update_ride_location(self):
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.post(f"/api/rides/{self.ride.id}/location/update/", {"lat": 33.6450, "lng": 72.9920}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthenticated_user_cannot_update_location(self):
+        response = self.client.post(f"/api/rides/{self.ride.id}/location/update/", {"lat": 33.6450, "lng": 72.9920}, format="json")
+        self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+
 
 

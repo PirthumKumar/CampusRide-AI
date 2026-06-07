@@ -1,5 +1,4 @@
-// CAMPUSRIDE INTERACTIVE MAP SERVICE (LEAFLET.JS & OPENSTREETMAP WRAPPER)
-
+// CAMPUSRIDE INTERACTIVE MAP SERVICE (LEAFLET.JS WRAPPER)
 const CampusMap = {
     map: null,
     driverMarker: null,
@@ -12,11 +11,6 @@ const CampusMap = {
     tileLayerAttrib: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
 
     init(elementId, onClickCallback = null) {
-        if (typeof L === 'undefined') {
-            console.error("Leaflet library L is not loaded.");
-            return null;
-        }
-
         if (this.map) {
             this.map.remove();
         }
@@ -59,8 +53,6 @@ const CampusMap = {
     },
 
     clearMap() {
-        if (!this.map) return;
-
         // Clear persistent markers
         this.markers.forEach(m => this.map.removeLayer(m));
         this.markers = [];
@@ -80,8 +72,6 @@ const CampusMap = {
 
     // Set interactive pickup/drop-off marker during ride creation or search
     setSelectionMarker(type, lat, lng, name = "") {
-        if (!this.map) return;
-
         if (this.tempMarkers[type]) {
             this.map.removeLayer(this.tempMarkers[type]);
         }
@@ -110,50 +100,6 @@ const CampusMap = {
         this.panTo(lat, lng);
     },
 
-    setSearchMarker(lat, lng, displayName, mapType) {
-        if (!this.map) return;
-
-        this.clearSearchMarker();
-
-        const searchIcon = L.divIcon({
-            className: 'search-location-marker',
-            html: `<div style="
-                background: #f59e0b;
-                width: 14px;
-                height: 14px;
-                border-radius: 50%;
-                border: 3px solid white;
-                box-shadow: 0 0 10px #f59e0b;
-            "></div>`,
-            iconSize: [14, 14],
-            iconAnchor: [7, 7]
-        });
-
-        const marker = L.marker([lat, lng], { icon: searchIcon }).addTo(this.map);
-        
-        const popupHtml = `
-            <div style="font-family: 'Inter', sans-serif; color: white; padding: 4px; width: 180px;">
-                <b style="font-size: 11px;">Selected Location</b>
-                <p style="font-size: 11px; margin: 4px 0 8px 0; color: #d1d5db;">${displayName}</p>
-                <div style="display: flex; gap: 8px;">
-                    <button onclick="window.setPointFromSearch('${mapType}', 'pickup', ${lat}, ${lng}, '${displayName.replace(/'/g, "\\'")}')" class="btn btn-primary btn-sm" style="font-size: 9px; padding: 4px 8px; cursor: pointer;">Set Pickup</button>
-                    <button onclick="window.setPointFromSearch('${mapType}', 'dropoff', ${lat}, ${lng}, '${displayName.replace(/'/g, "\\'")}')" class="btn btn-secondary btn-sm" style="font-size: 9px; padding: 4px 8px; cursor: pointer;">Set Dropoff</button>
-                </div>
-            </div>
-        `;
-        
-        marker.bindPopup(popupHtml).openPopup();
-        this.tempMarkers['search'] = marker;
-        this.panTo(lat, lng);
-    },
-
-    clearSearchMarker() {
-        if (this.map && this.tempMarkers['search']) {
-            this.map.removeLayer(this.tempMarkers['search']);
-            delete this.tempMarkers['search'];
-        }
-    },
-
     panTo(lat, lng, zoom = 14) {
         if (this.map) {
             this.map.setView([lat, lng], zoom);
@@ -161,8 +107,6 @@ const CampusMap = {
     },
 
     showRides(ridesList, onRideSelectCallback) {
-        if (!this.map) return;
-
         this.clearMap();
 
         if (!ridesList || ridesList.length === 0) return;
@@ -239,8 +183,6 @@ const CampusMap = {
     },
 
     drawRoutePath(startCoords, endCoords, stopsList = []) {
-        if (!this.map) return;
-
         // Clear previous paths & markers
         this.clearMap();
 
@@ -314,7 +256,7 @@ const CampusMap = {
         const endLat = endCoords[0];
         const endLng = endCoords[1];
 
-        // OSRM expects: longitude,latitude (free routing engine)
+        // OSRM expects: longitude,latitude
         const url = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson&steps=true`;
 
         try {
@@ -359,7 +301,7 @@ const CampusMap = {
             // Extract instructions
             const steps = [];
             if (route.legs && route.legs[0] && route.legs[0].steps) {
-                route.legs[0].steps.forEach((step) => {
+                route.legs[0].steps.forEach((step, idx) => {
                     if (step.maneuver && step.maneuver.instruction) {
                         steps.push({
                             instruction: step.maneuver.instruction,
@@ -376,7 +318,7 @@ const CampusMap = {
                 steps: steps
             };
         } catch (error) {
-            console.error("OSRM Routing error:", error);
+            console.error("Routing error:", error);
             // Draw simple dotted line fallback
             this.polylines.forEach(p => this.map.removeLayer(p));
             this.polylines = [];
@@ -412,8 +354,6 @@ const CampusMap = {
     },
 
     updateDriverMarker(lat, lng) {
-        if (!this.map) return;
-
         if (this.driverMarker) {
             this.driverMarker.setLatLng([lat, lng]);
         } else {
@@ -430,7 +370,7 @@ const CampusMap = {
     },
 
     clearDriverMarker() {
-        if (this.map && this.driverMarker) {
+        if (this.driverMarker) {
             this.map.removeLayer(this.driverMarker);
             this.driverMarker = null;
         }

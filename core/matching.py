@@ -155,3 +155,171 @@ def optimize_driver_route(driver_start, driver_end, bookings):
     route.append({'type': 'end', 'name': 'Driver End', 'coords': driver_end})
     
     return route, round(min_dist, 2)
+
+
+def calculate_timetable_match_score(t1, t2):
+    """
+    Compares two timetable entries to see if they are a match.
+    Returns: (is_match, score_percentage)
+    """
+    # 1. Day of week MUST match
+    if t1.day_of_week.strip().lower() != t2.day_of_week.strip().lower():
+        return False, 0
+
+    # 2. Pickup distance <= 2.0 km
+    dist_pickup = haversine_distance(t1.pickup_lat, t1.pickup_lng, t2.pickup_lat, t2.pickup_lng)
+    if dist_pickup > 2.0:
+        return False, 0
+
+    # 3. Dropoff distance <= 1.0 km
+    dist_dropoff = haversine_distance(t1.dropoff_lat, t1.dropoff_lng, t2.dropoff_lat, t2.dropoff_lng)
+    if dist_dropoff > 1.0:
+        return False, 0
+
+    # 4. Class start time difference <= 60 mins
+    m1 = t1.class_start_time.hour * 60 + t1.class_start_time.minute
+    m2 = t2.class_start_time.hour * 60 + t2.class_start_time.minute
+    diff_start = abs(m1 - m2)
+    if diff_start > 60:
+        return False, 0
+
+    # Points calculation (Max points: 120)
+    # Pickup proximity (max 40)
+    if dist_pickup <= 0.2:
+        pickup_pts = 40
+    elif dist_pickup <= 0.5:
+        pickup_pts = 35
+    elif dist_pickup <= 1.0:
+        pickup_pts = 30
+    else:
+        pickup_pts = 20
+
+    # Dropoff proximity (max 30)
+    if dist_dropoff <= 0.1:
+        dropoff_pts = 30
+    elif dist_dropoff <= 0.3:
+        dropoff_pts = 25
+    elif dist_dropoff <= 0.5:
+        dropoff_pts = 20
+    else:
+        dropoff_pts = 15
+
+    # Class start difference (max 30)
+    if diff_start <= 15:
+        start_pts = 30
+    elif diff_start <= 30:
+        start_pts = 20
+    else:
+        start_pts = 10
+
+    # Preferred departure difference (max 20)
+    d1 = t1.preferred_departure_time.hour * 60 + t1.preferred_departure_time.minute
+    d2 = t2.preferred_departure_time.hour * 60 + t2.preferred_departure_time.minute
+    diff_dept = abs(d1 - d2)
+    if diff_dept <= 15:
+        dept_pts = 20
+    elif diff_dept <= 30:
+        dept_pts = 15
+    elif diff_dept <= 60:
+        dept_pts = 10
+    else:
+        dept_pts = 0
+
+    # Trust factors (+10 if verified student, +10 for rating >= 4.5)
+    trust_pts = 0
+    if t2.student.verification_status == 'verified':
+        trust_pts += 10
+    if t2.student.rating_avg >= 4.5:
+        trust_pts += 10
+
+    total_pts = pickup_pts + dropoff_pts + start_pts + dept_pts + trust_pts
+    match_percentage = min(100, int((total_pts / 120.0) * 100))
+    return True, match_percentage
+
+
+def calculate_ride_timetable_match_score(ride, t):
+    """
+    Compares an upcoming Ride with a Timetable entry.
+    Returns: (is_match, score_percentage)
+    """
+    # 1. Day of week must match
+    # For recurring ride: check if t.day_of_week is in recurring_days
+    # For one-off ride: check if ride.date falls on t.day_of_week
+    day_matches = False
+    target_day = t.day_of_week.strip().lower()  # e.g. "monday"
+    
+    if ride.is_recurring and ride.recurring_days:
+        # e.g., "Monday,Wednesday"
+        days_list = [d.strip().lower() for d in ride.recurring_days.split(',')]
+        if target_day in days_list or target_day[:3] in [d[:3] for d in days_list]:
+            day_matches = True
+    else:
+        # e.g. ride.date.strftime('%A') -> "Monday"
+        ride_day = ride.date.strftime('%A').lower()
+        if ride_day == target_day:
+            day_matches = True
+            
+    if not day_matches:
+        return False, 0
+
+    # 2. Pickup distance <= 2.0 km
+    dist_pickup = haversine_distance(ride.pickup_lat, ride.pickup_lng, t.pickup_lat, t.pickup_lng)
+    if dist_pickup > 2.0:
+        return False, 0
+
+    # 3. Dropoff distance <= 1.0 km
+    dist_dropoff = haversine_distance(ride.dropoff_lat, ride.dropoff_lng, t.dropoff_lat, t.dropoff_lng)
+    if dist_dropoff > 1.0:
+        return False, 0
+
+    # 4. Ride departure must be BEFORE class start time
+    r_mins = ride.time.hour * 60 + ride.time.minute
+    c_mins = t.class_start_time.hour * 60 + t.class_start_time.minute
+    if r_mins > c_mins:
+        return False, 0
+
+    # Points calculation (Max points: 100)
+    # Pickup proximity (max 40)
+    if dist_pickup <= 0.2:
+        pickup_pts = 40
+    elif dist_pickup <= 0.5:
+        pickup_pts = 35
+    elif dist_pickup <= 1.0:
+        pickup_pts = 30
+    else:
+        pickup_pts = 20
+
+    # Dropoff proximity (max 30)
+    if dist_dropoff <= 0.1:
+        dropoff_pts = 30
+    elif dist_dropoff <= 0.3:
+        dropoff_pts = 25
+    elif dist_dropoff <= 0.5:
+        dropoff_pts = 20
+    else:
+        dropoff_pts = 15
+
+    # Departure time offset vs preferred departure (max 30)
+    p_mins = t.preferred_departure_time.hour * 60 + t.preferred_departure_time.minute
+    diff_dept = abs(r_mins - p_mins)
+    
+    if diff_dept <= 15:
+        dept_pts = 30
+    elif diff_dept <= 30:
+        dept_pts = 20
+    elif diff_dept <= 60:
+        dept_pts = 10
+    else:
+        dept_pts = 0
+
+    # Trust / Verification of driver
+    trust_pts = 0
+    if ride.driver.verification_status == 'verified':
+        trust_pts += 10
+    if ride.driver.rating_avg >= 4.5:
+        trust_pts += 10
+
+    total_pts = pickup_pts + dropoff_pts + dept_pts + trust_pts
+    match_percentage = min(100, int((total_pts / 100.0) * 100))
+    return True, match_percentage
+

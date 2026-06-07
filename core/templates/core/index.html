@@ -17,7 +17,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     
     <!-- Custom Style Sheet -->
-    <link rel="stylesheet" href="/static/css/styles.css?v=1.5"/>
+    <link rel="stylesheet" href="/static/css/styles.css?v=4.0"/>
+
+
+
 </head>
 <body>
 
@@ -44,10 +47,12 @@
                     <li><a class="nav-item" data-view="search" id="navSearchNode"><i class="ri-search-eye-line"></i> Find Rides</a></li>
                     <li><a class="nav-item" data-view="create" id="navCreateNode"><i class="ri-add-circle-line"></i> Create a Ride</a></li>
                     <li><a class="nav-item" data-view="bookings" id="navBookingsNode"><i class="ri-calendar-todo-line"></i> My Bookings</a></li>
+                    <li><a class="nav-item" data-view="timetable" id="navTimetableNode"><i class="ri-calendar-2-line"></i> Class Timetable</a></li>
                     <li><a class="nav-item" data-view="chat" id="navChatNode"><i class="ri-message-3-line"></i> Inbox</a></li>
                     <li><a class="nav-item" data-view="verification" id="navVerificationNode"><i class="ri-shield-user-line"></i> ID Verification</a></li>
                     <li id="adminNavNode" style="display: none;"><a class="nav-item" data-view="admin"><i class="ri-admin-line"></i> Admin Panel</a></li>
                 </ul>
+
             </nav>
             
             <!-- User Profile card footer -->
@@ -609,7 +614,243 @@
             </div>
 
             <!-- ---------------------------------------------------- -->
+            <!-- 7.5 CLASS TIMETABLE SCREEN -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-timetable" class="timetable-section" style="display: none;">
+                <!-- Blocker for unverified students -->
+                <div id="timetableVerificationLock" class="card" style="max-width: 600px; margin: 40px auto; text-align: center; padding: 40px; display: none;">
+                    <div class="stat-icon accent" style="font-size: 48px; margin: 0 auto 20px;"><i class="ri-shield-lock-line"></i></div>
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 12px; font-weight: 700;">Student Verification Required</h3>
+                    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 24px; max-width: 450px; margin-left: auto; margin-right: auto;">
+                        Only verified students can access the AI Timetable Ride Matching features. Please submit your student ID details for verification first.
+                    </p>
+                    <button class="btn btn-primary" onclick="window.App.switchView('verification')">Go to ID Verification</button>
+                </div>
+
+                <div id="timetableContentArea">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                        <div>
+                            <h2 style="font-family: var(--font-heading); font-weight: 800;"><i class="ri-calendar-2-line" style="color: var(--primary);"></i> Weekly Class Timetable</h2>
+                            <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Organize your weekly class schedule to get matched with riders and driver partners going your way.</p>
+                        </div>
+                        <button class="btn btn-primary" id="addTimetableEntryBtn"><i class="ri-add-line"></i> Add Class Schedule</button>
+                    </div>
+
+                    <div class="weekly-timetable-view">
+                        <div class="grid-cols-7" id="weeklyTimetableGrid" style="gap: 12px; align-items: start;">
+                            <!-- Dynamically populated day columns -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 7.6 SUGGESTED RIDE MATCHES SCREEN -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-timetable-matches" class="timetable-matches-section" style="display: none;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                    <button class="btn btn-secondary btn-sm" id="backToTimetableBtn"><i class="ri-arrow-left-line"></i> Back to Timetable</button>
+                    <div>
+                        <h2 style="font-family: var(--font-heading); font-weight: 800;"><i class="ri-magic-line" style="color: var(--primary);"></i> Suggested Ride Matches</h2>
+                        <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;" id="timetableMatchSubTitle">Matches for Course</p>
+                    </div>
+                </div>
+
+                <!-- Recommendation Box -->
+                <div class="card" style="background: rgba(30, 41, 59, 0.5); border: 1px dashed var(--primary); padding: 16px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; border-radius: var(--radius-sm);">
+                    <div class="stat-icon primary" style="font-size: 24px; min-width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"><i class="ri-lightbulb-line" style="color: var(--primary);"></i></div>
+                    <div>
+                        <h4 style="font-family: var(--font-heading); font-weight: 700; margin-bottom: 4px;">Smart AI Recommendation</h4>
+                        <p style="font-size: 13px;" id="timetableMatchRecommendationText">Loading recommendation...</p>
+                    </div>
+                </div>
+
+                <div class="grid-cols-2" style="align-items: start; gap: 24px;">
+                    <!-- Left Column: Matched Driver Rides -->
+                    <div class="card">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-car-line" style="color: var(--primary);"></i> Matching Driver Rides</h3>
+                        <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Rides created by student or verified drivers matching your route and time window.</p>
+                        <div id="timetableMatchedRidesNode" class="rides-list">
+                            <!-- Dynamically loaded -->
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Matching Classmates (to create a ride) -->
+                    <div class="card">
+                        <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-group-line" style="color: var(--secondary);"></i> Matching Classmates</h3>
+                        <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Other students near you going to similar classes. Group up and create a shared ride!</p>
+                        <div id="timetableMatchedStudentsNode" class="rides-list">
+                            <!-- Dynamically loaded -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- TIMETABLE FORM MODAL -->
+            <!-- ---------------------------------------------------- -->
+            <div class="modal-overlay" id="timetableFormModal" style="display: none; z-index: 1050;">
+                <div class="modal-card" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+                    <div class="modal-header">
+                        <h3 style="font-family: var(--font-heading); font-weight: 800;" id="timetableModalTitle">Add Class Schedule</h3>
+                        <button class="modal-close-btn" id="closeTimetableModalBtn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="timetableForm">
+                            <input type="hidden" id="timetableEntryId" />
+                            <div class="grid-cols-2" style="gap: 16px;">
+                                <div class="form-group">
+                                    <label class="form-label">Course Name</label>
+                                    <input type="text" class="form-input" id="timetableCourseName" placeholder="e.g. Computer Science 101" required />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Day of Week</label>
+                                    <select class="form-input" id="timetableDayOfWeek" required>
+                                        <option value="Monday">Monday</option>
+                                        <option value="Tuesday">Tuesday</option>
+                                        <option value="Wednesday">Wednesday</option>
+                                        <option value="Thursday">Thursday</option>
+                                        <option value="Friday">Friday</option>
+                                        <option value="Saturday">Saturday</option>
+                                        <option value="Sunday">Sunday</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid-cols-3" style="margin-top: 12px; gap: 16px;">
+                                <div class="form-group">
+                                    <label class="form-label">Class Start Time</label>
+                                    <input type="time" class="form-input" id="timetableClassStartTime" required />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Class End Time</label>
+                                    <input type="time" class="form-input" id="timetableClassEndTime" required />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Preferred Departure</label>
+                                    <input type="time" class="form-input" id="timetablePreferredDepartureTime" required />
+                                </div>
+                            </div>
+                            
+                            <h4 style="margin: 20px 0 8px; font-family: var(--font-heading); border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">Route & Location details</h4>
+                            <div class="grid-cols-2" style="gap: 16px;">
+                                <div>
+                                    <div class="form-group">
+                                        <label class="form-label">Pickup Location Name</label>
+                                        <input type="text" class="form-input" id="timetablePickupName" placeholder="e.g. Student Hostel Block A" required />
+                                    </div>
+                                    <div class="form-row" style="margin-top: 10px; display: flex; gap: 8px;">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">Pickup Lat</label>
+                                            <input type="number" step="any" class="form-input" id="timetablePickupLat" required readonly />
+                                        </div>
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">Pickup Lng</label>
+                                            <input type="number" step="any" class="form-input" id="timetablePickupLng" required readonly />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="form-group">
+                                        <label class="form-label">Campus Destination Building</label>
+                                        <input type="text" class="form-input" id="timetableDropoffName" placeholder="e.g. CS Department Main Building" required />
+                                    </div>
+                                    <div class="form-row" style="margin-top: 10px; display: flex; gap: 8px;">
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">Dropoff Lat</label>
+                                            <input type="number" step="any" class="form-input" id="timetableDropoffLat" required readonly />
+                                        </div>
+                                        <div class="form-group" style="flex: 1;">
+                                            <label class="form-label">Dropoff Lng</label>
+                                            <input type="number" step="any" class="form-input" id="timetableDropoffLng" required readonly />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 12px; margin-bottom: 12px; display: flex; gap: 10px;">
+                                <button type="button" class="btn btn-secondary btn-sm" id="timetablePickPickupBtn" style="flex: 1;"><i class="ri-map-pin-user-line"></i> Set Pickup on Map</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="timetablePickDropoffBtn" style="flex: 1;"><i class="ri-map-pin-5-line"></i> Set Dropoff on Map</button>
+                            </div>
+
+                            <div class="map-wrapper" style="height: 250px; margin-bottom: 16px; position: relative;">
+                                <div class="map-search-overlay">
+                                    <div class="map-search-row">
+                                        <input type="text" class="map-search-input" id="timetableMapQuery" placeholder="Search campus / city locations..."/>
+                                        <button class="map-search-btn" id="timetableMapBtn" type="button"><i class="ri-search-line"></i></button>
+                                    </div>
+                                    <ul class="map-search-results" id="timetableMapResults"></ul>
+                                </div>
+                                <div class="map-container" id="timetableMapCanvas"></div>
+                                <div style="position: absolute; bottom: 10px; left: 10px; z-index: 1010; background: rgba(0,0,0,0.85); padding: 4px 8px; border-radius: 4px; font-size: 10px; border: 1px solid var(--border-color);">
+                                    <span id="timetableMapInstruction"><i class="ri-information-line"></i> Click the map to place the Pickup marker.</span>
+                                </div>
+                            </div>
+
+                            <div class="modal-footer" style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                                <button type="button" class="btn btn-secondary" id="cancelTimetableBtn">Cancel</button>
+                                <button type="submit" class="btn btn-primary" id="saveTimetableSubmitBtn">Save Class Schedule</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- TIMETABLE CREATE RIDE MODAL -->
+            <!-- ---------------------------------------------------- -->
+            <div class="modal-overlay" id="timetableCreateRideModal" style="display: none; z-index: 1050;">
+                <div class="modal-card" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3 style="font-family: var(--font-heading); font-weight: 800;">Create Recurring Ride</h3>
+                        <button class="modal-close-btn" id="closeTimetableCreateRideModalBtn">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="timetableCreateRideForm">
+                            <input type="hidden" id="timetableCreateRideId" />
+                            <div class="form-group">
+                                <label class="form-label">Price per Seat (Rs.)</label>
+                                <input type="number" class="form-input" id="timetableCreateRidePrice" placeholder="e.g. 150" required />
+                            </div>
+                            <div class="grid-cols-2" style="margin-top: 12px; gap: 16px;">
+                                <div class="form-group">
+                                    <label class="form-label">Vehicle Type</label>
+                                    <select class="form-input" id="timetableCreateRideVehicleType" required>
+                                        <option value="car">Car</option>
+                                        <option value="motorbike">Motorbike</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Total Seats</label>
+                                    <input type="number" class="form-input" id="timetableCreateRideSeats" min="1" value="4" required />
+                                </div>
+                            </div>
+                            <div class="grid-cols-2" style="margin-top: 12px; gap: 16px;">
+                                <div class="form-group">
+                                    <label class="form-label">Vehicle Model</label>
+                                    <input type="text" class="form-input" id="timetableCreateRideVehicleModel" placeholder="e.g. Toyota Corolla" required />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">License Plate Details</label>
+                                    <input type="text" class="form-input" id="timetableCreateRideVehiclePlate" placeholder="e.g. LE-1234" required />
+                                </div>
+                            </div>
+                            <div class="form-group" style="margin-top: 12px;">
+                                <label class="form-label">Ride Description / Rules (Optional)</label>
+                                <textarea class="form-input" id="timetableCreateRideNotes" rows="3" placeholder="e.g. Females only, AC available, etc."></textarea>
+                            </div>
+                            <div class="modal-footer" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+                                <button type="button" class="btn btn-secondary" id="cancelTimetableCreateRideBtn">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Publish Recurring Ride</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
             <!-- 8. ADMIN DASHBOARD SCREEN -->
+            <!-- ---------------------------------------------------- -->
+
             <!-- ---------------------------------------------------- -->
             <div id="view-admin" class="admin-section" style="display: none;">
                 <div class="card" style="margin-bottom: 32px;">
@@ -677,9 +918,17 @@
                     </div>
 
                     <!-- Mapping routes -->
-                    <div class="map-wrapper" style="height: 300px;">
-                        <div class="map-container" id="modalMapCanvas"></div>
+                    <div>
+                        <!-- Live GPS Status Banner (shown only when ride is active) -->
+                        <div id="liveTrackingStatusBanner" style="display:none; align-items:center; gap:10px; padding:10px 14px; border-radius:8px; margin-bottom:10px; font-size:12px; font-weight:600; background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.35); color:#34d399;">
+                            <span style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s infinite;"></span>
+                            <span id="liveTrackingStatusText">Connecting to driver location...</span>
+                        </div>
+                        <div class="map-wrapper" style="height: 300px;">
+                            <div class="map-container" id="modalMapCanvas"></div>
+                        </div>
                     </div>
+
                     <!-- Collapsible Directions Box for modal -->
                     <div class="directions-guide-container" id="modalDirectionsGuide" style="margin-top: 10px; display: none;">
                         <div class="directions-guide-header" onclick="const b = document.getElementById('modalDirectionsBody'); b.style.display = b.style.display === 'none' ? 'block' : 'none'">
@@ -808,6 +1057,80 @@
         </div>
     </div>
 
+    <!-- F. Ride QR/PIN Verification Modal -->
+    <div class="modal-overlay" id="verificationModal" style="display: none;">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3 style="font-family: var(--font-heading); font-weight: 800; font-size: 18px; color: white;">Ride Verification</h3>
+                <button class="modal-close" onclick="document.getElementById('verificationModal').style.display='none'" style="background: none; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div class="verify-tabs" style="display: flex; gap: 12px; margin-bottom: 20px;">
+                    <button class="btn btn-secondary" id="btnTabPin" onclick="App.switchVerifyTab('pin')" style="flex: 1; padding: 10px; font-size: 13px; font-weight: 700;">PIN Code</button>
+                    <button class="btn btn-secondary" id="btnTabQr" onclick="App.switchVerifyTab('qr')" style="flex: 1; padding: 10px; font-size: 13px; font-weight: 700;">QR Scanner</button>
+                </div>
+                
+                <!-- PIN Tab content -->
+                <div id="verifyTabPinContent" style="display: block;">
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+                        Ask the passenger for their 6-digit verification PIN and enter it below to verify and start the ride.
+                    </p>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label" style="font-size: 10px; margin-bottom: 6px;">6-Digit PIN</label>
+                        <input type="text" id="verifyPinInput" class="form-input" placeholder="------" maxlength="6" style="font-size: 24px; text-align: center; letter-spacing: 6px; font-weight: bold; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); width: 100%;"/>
+                    </div>
+                    <button class="btn btn-primary" id="btnVerifyPinSubmit" style="width: 100%; font-size: 13px; font-weight: 700; padding: 12px;">
+                        <i class="ri-checkbox-circle-line"></i> Verify PIN and Start Ride
+                    </button>
+                </div>
+
+                <!-- QR Code Tab content -->
+                <div id="verifyTabQrContent" style="display: none;">
+                    <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+                        Scan the passenger's QR code or paste their secure verification token below.
+                    </p>
+                    
+                    <!-- Webcam wrapper -->
+                    <div class="scanner-container" style="position: relative; width: 100%; height: 200px; background: rgba(0,0,0,0.3); border-radius: var(--radius-sm); overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); margin-bottom: 16px;">
+                        <video id="scannerVideo" style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: none;"></video>
+                        <div id="scannerFallback" style="text-align: center; color: var(--text-muted); font-size: 11px; padding: 20px; z-index: 10;">
+                            <i class="ri-camera-off-line" style="font-size: 36px; display: block; margin-bottom: 8px; color: var(--text-muted);"></i>
+                            Webcam inactive. Start camera below or paste the token directly.
+                        </div>
+                        <!-- Scanning line animation -->
+                        <div id="scannerLine" style="display: none; position: absolute; left: 0; right: 0; height: 3px; background: var(--accent); opacity: 0.8; box-shadow: 0 0 8px var(--accent); animation: scanAnimation 2s linear infinite; z-index: 15;"></div>
+                    </div>
+                    
+                    <style>
+                        @keyframes scanAnimation {
+                            0% { top: 0%; }
+                            50% { top: 100%; }
+                            100% { top: 0%; }
+                        }
+                        .verify-tabs button.active-tab {
+                            background: rgba(99, 102, 241, 0.15) !important;
+                            border-color: var(--primary) !important;
+                            color: white !important;
+                        }
+                    </style>
+
+                    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                        <button class="btn btn-secondary btn-sm" id="btnStartCamera" style="flex: 1; padding: 8px 12px; font-size: 11px;"><i class="ri-camera-line"></i> Start Camera</button>
+                        <button class="btn btn-secondary btn-sm" id="btnStopCamera" style="flex: 1; padding: 8px 12px; font-size: 11px; display: none;"><i class="ri-camera-off-line"></i> Stop Camera</button>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label class="form-label" style="font-size: 10px; margin-bottom: 6px;">Secure Token (Simulation/Paste Mode)</label>
+                        <input type="text" id="verifyQrTokenInput" class="form-input" placeholder="Paste verification token here" style="padding: 10px; font-size: 12px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); color: white; border-radius: var(--radius-sm); width: 100%;"/>
+                    </div>
+                    <button class="btn btn-primary" id="btnVerifyQrSubmit" style="width: 100%; font-size: 13px; font-weight: 700; padding: 12px;">
+                        <i class="ri-qr-code-line"></i> Verify Token and Start Ride
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- E. Emergency SOS triggered overlay screen -->
     <div class="modal-overlay" id="emergencyActiveModal" style="background: rgba(239, 68, 68, 0.95); backdrop-filter: blur(12px);">
         <div class="modal-content" style="max-width: 500px; border-color: white; text-align: center; padding: 40px 24px;">
@@ -887,11 +1210,17 @@
 
     <!-- Leaflet mapping library JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
+
+    <!-- QR Code Generator Library -->
+    <script src="/static/js/qrcode.min.js"></script>
+
     <!-- App Scripts -->
-    <script src="/static/js/api.js?v=1.5"></script>
-    <script src="/static/js/map.js?v=1.5"></script>
-    <script src="/static/js/app.js?v=1.5"></script>
+    <script src="/static/js/api.js?v=4.0"></script>
+    <script src="/static/js/map.js?v=4.0"></script>
+    <script src="/static/js/app.js?v=4.0"></script>
+    <link rel="stylesheet" href="/static/css/styles.css?v=4.0">
+
+
 
 </body>
 </html>

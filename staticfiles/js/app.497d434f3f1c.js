@@ -29,7 +29,6 @@ const App = {
     pollingTimer: null,
     locationPollTimer: null,
     driverGeolocateWatchId: null,
-    activeStartedRideId: null,
 
     // Image Fallbacks
     getAvatarFallback(username) {
@@ -104,7 +103,7 @@ const App = {
         // Resume background location watch on page reload/log in if active started ride exists
         API.getBookings().then(res => {
             if (res.data && !res.error && res.data.received_requests) {
-                App.updateBackgroundDriverLocationWatch(res.data.received_requests);
+                this.updateBackgroundDriverLocationWatch(res.data.received_requests);
             }
         });
     },
@@ -112,11 +111,6 @@ const App = {
     onGuest() {
         this.currentUser = null;
         this.stopPolling();
-        if (this.driverGeolocateWatchId !== null) {
-            navigator.geolocation.clearWatch(this.driverGeolocateWatchId);
-            this.driverGeolocateWatchId = null;
-        }
-        this.activeStartedRideId = null;
         
         document.getElementById('sidebarNode').style.display = 'none';
         document.getElementById('headerNode').style.display = 'none';
@@ -793,8 +787,42 @@ const App = {
                     const lat = parseFloat(item.lat);
                     const lng = parseFloat(item.lon);
                     
-                    // Set search location marker on Google Map
-                    CampusMap.setSearchMarker(lat, lng, displayName, mapType);
+                    // Pan map to location
+                    CampusMap.panTo(lat, lng, 14);
+                    
+                    // Clear previous search marker if any
+                    if (CampusMap.tempMarkers['search']) {
+                        CampusMap.map.removeLayer(CampusMap.tempMarkers['search']);
+                    }
+                    
+                    const searchIcon = L.divIcon({
+                        className: 'search-location-marker',
+                        html: `<div style="
+                            background: #f59e0b;
+                            width: 14px;
+                            height: 14px;
+                            border-radius: 50%;
+                            border: 3px solid white;
+                            box-shadow: 0 0 10px #f59e0b;
+                        "></div>`,
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7]
+                    });
+                    
+                    const marker = L.marker([lat, lng], { icon: searchIcon }).addTo(CampusMap.map);
+                    CampusMap.tempMarkers['search'] = marker;
+                    
+                    const popupHtml = `
+                        <div style="font-family: 'Inter', sans-serif; color: white; padding: 4px; width: 180px;">
+                            <b style="font-size: 11px;">Selected Location</b>
+                            <p style="font-size: 11px; margin: 4px 0 8px 0; color: #d1d5db;">${displayName}</p>
+                            <div style="display: flex; gap: 8px;">
+                                <button onclick="window.setPointFromSearch('${mapType}', 'pickup', ${lat}, ${lng}, '${displayName.replace(/'/g, "\\'")}')" class="btn btn-primary btn-sm" style="font-size: 9px; padding: 4px 8px; cursor: pointer;">Set Pickup</button>
+                                <button onclick="window.setPointFromSearch('${mapType}', 'dropoff', ${lat}, ${lng}, '${displayName.replace(/'/g, "\\'")}')" class="btn btn-secondary btn-sm" style="font-size: 9px; padding: 4px 8px; cursor: pointer;">Set Dropoff</button>
+                            </div>
+                        </div>
+                    `;
+                    marker.bindPopup(popupHtml).openPopup();
                 });
                 resultsContainer.appendChild(li);
             });
@@ -1411,12 +1439,11 @@ const App = {
         const activeBooking = receivedRequests.find(b => b.ride_status === 'started');
         
         if (activeBooking) {
-            App.activeStartedRideId = activeBooking.ride.id;
             // We have an active started ride! Start watching if not already watching
-            if (App.driverGeolocateWatchId === null) {
+            if (this.driverGeolocateWatchId === null) {
                 if (navigator.geolocation) {
                     console.log(`Starting background location tracking for active ride #${activeBooking.ride.id}`);
-                    App.driverGeolocateWatchId = navigator.geolocation.watchPosition(
+                    this.driverGeolocateWatchId = navigator.geolocation.watchPosition(
                         async (position) => {
                             const lat = position.coords.latitude;
                             const lng = position.coords.longitude;
@@ -1426,7 +1453,7 @@ const App = {
                             await API.updateRideLocation(activeBooking.ride.id, lat, lng);
                             
                             // If the detailed map modal is currently open for this ride, update the driver marker!
-                            if (App.activeRideDetail && App.activeRideDetail.id === activeBooking.ride.id && typeof CampusMap !== 'undefined' && CampusMap.map) {
+                            if (this.activeRideDetail && this.activeRideDetail.id === activeBooking.ride.id && typeof CampusMap !== 'undefined' && CampusMap.map) {
                                 CampusMap.updateDriverMarker(lat, lng);
                             }
                         },
@@ -1445,12 +1472,11 @@ const App = {
             }
         } else {
             // No active started ride. Stop watching if we were watching
-            if (App.driverGeolocateWatchId !== null) {
+            if (this.driverGeolocateWatchId !== null) {
                 console.log("Stopping background location tracking (no active started ride)");
-                navigator.geolocation.clearWatch(App.driverGeolocateWatchId);
-                App.driverGeolocateWatchId = null;
+                navigator.geolocation.clearWatch(this.driverGeolocateWatchId);
+                this.driverGeolocateWatchId = null;
             }
-            App.activeStartedRideId = null;
         }
     },
 
@@ -1979,11 +2005,6 @@ const App = {
             // Display Detail Modal
             document.getElementById('rideDetailModal').style.display = 'flex';
 
-            // Reset the live tracking banner (it lives in the HTML, just hide/show as needed)
-            const liveTrackingBannerId = 'liveTrackingStatusBanner';
-            const bannerEl = document.getElementById(liveTrackingBannerId);
-            if (bannerEl) bannerEl.style.display = 'none';
-
             // Init detailed map
             setTimeout(() => {
                 const modalMap = CampusMap.init('modalMapCanvas');
@@ -2013,113 +2034,53 @@ const App = {
 
                 // Start live GPS tracking if driver or passenger
                 if (isDriver) {
-                    // Show driver tracking banner
-                    const banner = document.getElementById(liveTrackingBannerId);
-                    if (banner) {
-                        banner.style.display = 'flex';
-                        banner.style.background = 'rgba(59,130,246,0.15)';
-                        banner.style.border = '1px solid rgba(59,130,246,0.4)';
-                        banner.style.color = '#60a5fa';
-                        banner.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;display:inline-block;animation:pulse 1.5s infinite;"></span> Broadcasting your live location to passengers...`;
-                    }
-
                     if (navigator.geolocation) {
                         // Clear any existing watch first
                         if (App.driverGeolocateWatchId !== null) {
                             navigator.geolocation.clearWatch(App.driverGeolocateWatchId);
                             App.driverGeolocateWatchId = null;
                         }
-                        App.activeStartedRideId = ride.id;
                         App.driverGeolocateWatchId = navigator.geolocation.watchPosition(
                             async (position) => {
                                 const lat = position.coords.latitude;
                                 const lng = position.coords.longitude;
-                                console.log(`[CampusRide] Driver live location: ${lat}, ${lng}`);
-                                // Update server
+                                console.log(`Driver live location update: ${lat}, ${lng}`);
+                                // Call API to update location
                                 await API.updateRideLocation(ride.id, lat, lng);
-                                // Update marker on driver's own map
+                                // Also update local driver marker on driver's own map
                                 CampusMap.updateDriverMarker(lat, lng);
-                                // Update banner with coords
-                                const b = document.getElementById(liveTrackingBannerId);
-                                if (b) {
-                                    b.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:#3b82f6;display:inline-block;animation:pulse 1.5s infinite;"></span> Broadcasting live GPS &nbsp;<span style="opacity:0.7;font-weight:400;">${lat.toFixed(5)}, ${lng.toFixed(5)}</span>`;
-                                }
                             },
-                            (err) => {
-                                console.error('[CampusRide] Error watching position:', err);
-                                const b = document.getElementById(liveTrackingBannerId);
-                                if (b) {
-                                    b.style.background = 'rgba(239,68,68,0.15)';
-                                    b.style.border = '1px solid rgba(239,68,68,0.4)';
-                                    b.style.color = '#f87171';
-                                    b.innerHTML = `<i class="ri-error-warning-line"></i> GPS access denied. Passengers cannot see your location.`;
-                                }
+                            (error) => {
+                                console.error("Error watching position:", error);
                             },
-                            { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+                            {
+                                enableHighAccuracy: true,
+                                maximumAge: 0,
+                                timeout: 10000
+                            }
                         );
                     } else {
-                        const b = document.getElementById(liveTrackingBannerId);
-                        if (b) {
-                            b.style.display = 'flex';
-                            b.style.background = 'rgba(239,68,68,0.15)';
-                            b.style.border = '1px solid rgba(239,68,68,0.4)';
-                            b.style.color = '#f87171';
-                            b.innerHTML = `<i class="ri-error-warning-line"></i> GPS not supported by this browser.`;
-                        }
+                        console.error("Geolocation is not supported by this browser.");
                     }
                 } else if (hasBooking) {
-                    // Passenger live tracking mode
-                    // Show passenger tracking banner
-                    const banner = document.getElementById(liveTrackingBannerId);
-                    if (banner) {
-                        banner.style.display = 'flex';
-                        banner.style.background = 'rgba(16,185,129,0.12)';
-                        banner.style.border = '1px solid rgba(16,185,129,0.35)';
-                        banner.style.color = '#34d399';
-                        banner.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s infinite;"></span> Connecting to driver location...`;
-                    }
-
                     // Clear any existing poll first
                     if (App.locationPollTimer !== null) {
                         clearInterval(App.locationPollTimer);
                         App.locationPollTimer = null;
                     }
-
-                    // FIX: use res.data.lat (API wrapper returns { data, status } not raw response)
+                    
+                    // Immediately fetch once, then poll every 8 seconds
                     const fetchLocation = async () => {
                         const res = await API.getRideLocation(ride.id);
-                        const locData = res && res.data ? res.data : null;
-                        if (locData && locData.lat !== undefined && locData.lat !== null) {
-                            // Update driver marker on map
-                            CampusMap.updateDriverMarker(locData.lat, locData.lng);
-                            // Pan map to driver
-                            CampusMap.panTo(locData.lat, locData.lng, 15);
-                            // Update banner
-                            const b = document.getElementById(liveTrackingBannerId);
-                            if (b) {
-                                const timeStr = locData.updated_at ? new Date(locData.updated_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}) : '';
-                                b.style.background = 'rgba(16,185,129,0.12)';
-                                b.style.border = '1px solid rgba(16,185,129,0.35)';
-                                b.style.color = '#34d399';
-                                b.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 1.5s infinite;"></span> Driver located &nbsp;<span style="opacity:0.7;font-weight:400;">${locData.lat.toFixed(5)}, ${locData.lng.toFixed(5)}</span>${timeStr ? ` &nbsp;&mdash;&nbsp; Updated ${timeStr}` : ''}`;
-                            }
-                        } else {
-                            // No location yet
-                            const b = document.getElementById(liveTrackingBannerId);
-                            if (b && b.innerHTML.includes('Connecting')) {
-                                b.innerHTML = `<span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;display:inline-block;animation:pulse 1.5s infinite;"></span> Waiting for driver to share location...`;
-                                b.style.background = 'rgba(245,158,11,0.12)';
-                                b.style.border = '1px solid rgba(245,158,11,0.35)';
-                                b.style.color = '#fbbf24';
-                            }
+                        if (res && res.lat !== undefined && res.lat !== null) {
+                            CampusMap.updateDriverMarker(res.lat, res.lng);
                         }
                     };
-
-                    // Fetch immediately then every 4 seconds
                     fetchLocation();
-                    App.locationPollTimer = setInterval(fetchLocation, 4000);
+                    
+                    App.locationPollTimer = setInterval(fetchLocation, 8000);
                 }
-            }, 300);
+            }, 200);
 
         } else {
             alert("Error fetching ride: " + (error || 'Server error'));
@@ -2891,9 +2852,6 @@ const App = {
         if (data && !error) {
             document.getElementById('verificationModal').style.display = 'none';
             alert("🎉 Ride verified successfully! You can start the ride now.");
-            if (data.booking) {
-                this.updateBackgroundDriverLocationWatch([data.booking]);
-            }
             this.loadBookingsData();
         } else {
             alert("Verification failed: " + (error || "Invalid PIN"));
@@ -2912,9 +2870,6 @@ const App = {
             this.stopCameraScanner();
             document.getElementById('verificationModal').style.display = 'none';
             alert("🎉 Ride verified successfully! You can start the ride now.");
-            if (data.booking) {
-                this.updateBackgroundDriverLocationWatch([data.booking]);
-            }
             this.loadBookingsData();
         } else {
             alert("Verification failed: " + (error || "Invalid QR token"));
@@ -2929,11 +2884,6 @@ const App = {
         const { data, error } = await API.completeBookingRide(bookingId);
         if (data && !error) {
             alert("🎉 Ride marked as completed successfully!");
-            if (App.driverGeolocateWatchId !== null) {
-                navigator.geolocation.clearWatch(App.driverGeolocateWatchId);
-                App.driverGeolocateWatchId = null;
-            }
-            App.activeStartedRideId = null;
             this.loadBookingsData();
         } else {
             alert("Failed to complete ride: " + (error || "Error occurred"));
@@ -2981,7 +2931,7 @@ window.closeRideDetailModal = function() {
         clearInterval(App.locationPollTimer);
         App.locationPollTimer = null;
     }
-    if (App.driverGeolocateWatchId !== null && !App.activeStartedRideId) {
+    if (App.driverGeolocateWatchId !== null) {
         navigator.geolocation.clearWatch(App.driverGeolocateWatchId);
         App.driverGeolocateWatchId = null;
     }
@@ -3004,7 +2954,10 @@ window.setPointFromSearch = function(mapType, pointType, lat, lng, name) {
         CampusMap.setSelectionMarker(pointType, lat, lng, name);
         
         // Remove search marker
-        CampusMap.clearSearchMarker();
+        if (CampusMap.tempMarkers['search']) {
+            CampusMap.map.removeLayer(CampusMap.tempMarkers['search']);
+            delete CampusMap.tempMarkers['search'];
+        }
         
         App.checkAndTraceRoute('search');
     } else if (mapType === 'create') {
@@ -3023,7 +2976,10 @@ window.setPointFromSearch = function(mapType, pointType, lat, lng, name) {
         }
         
         // Remove search marker
-        CampusMap.clearSearchMarker();
+        if (CampusMap.tempMarkers['search']) {
+            CampusMap.map.removeLayer(CampusMap.tempMarkers['search']);
+            delete CampusMap.tempMarkers['search'];
+        }
         
         App.checkAndTraceRoute('create');
     }

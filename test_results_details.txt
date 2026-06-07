@@ -1,0 +1,23 @@
+Exit code: 0
+--- STDOUT ---
+Found 29 test(s).
+System check identified no issues (0 silenced).
+? EMERGENCY SOS ?
+Student: student_sos
+University: None
+Phone: None
+Location Coordinates: (33.6428, 72.9904)
+Active Carpool: Unknown Ride (Driver: Unknown)
+Contacting Registered Emergency Contact: Not Provided
+Alerting Campus Security Dispatch...
+
+--- STDERR ---
+Creating test database for alias 'default'...
+
+.............................
+----------------------------------------------------------------------
+Ran 29 tests in 42.255s
+
+OK
+Destroying test database for alias 'default'...
+

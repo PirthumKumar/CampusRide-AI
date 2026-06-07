@@ -77,6 +77,21 @@ class Booking(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Verification Fields
+    verification_pin = models.CharField(max_length=6, blank=True, null=True)
+    verification_token = models.CharField(max_length=100, blank=True, null=True, unique=True)
+    is_verified = models.BooleanField(default=False)
+    verified_at = models.DateTimeField(blank=True, null=True)
+    
+    RIDE_STATUS_CHOICES = [
+        ('pending', 'Pending Approval'),
+        ('confirmed', 'Confirmed'),
+        ('started', 'Started'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    ride_status = models.CharField(max_length=20, choices=RIDE_STATUS_CHOICES, default='pending')
+
     def __str__(self):
         return f"Booking of {self.seats_booked} seat(s) on Ride {self.ride.id} by {self.passenger.username} ({self.status})"
 
@@ -168,3 +183,37 @@ class SOSEvent(models.Model):
 
     def __str__(self):
         return f"SOS by {self.user.username} - {self.status} ({self.created_at})"
+
+
+class RideLocation(models.Model):
+    ride = models.ForeignKey(Ride, on_delete=models.CASCADE, related_name='locations')
+    driver = models.ForeignKey(User, on_delete=models.CASCADE)
+    latitude = models.FloatField()
+    longitude = models.FloatField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('ride', 'driver')
+
+    def __str__(self):
+        return f"Location of Ride {self.ride.id} by Driver {self.driver.username} ({self.latitude}, {self.longitude})"
+
+
+class Timetable(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='timetable_entries')
+    course_name = models.CharField(max_length=200)
+    day_of_week = models.CharField(max_length=20)  # e.g., "Monday", "Tuesday", etc.
+    class_start_time = models.TimeField()
+    class_end_time = models.TimeField()
+    dropoff_name = models.CharField(max_length=200)  # Campus building or destination
+    dropoff_lat = models.FloatField()
+    dropoff_lng = models.FloatField()
+    pickup_name = models.CharField(max_length=200)  # Pickup location
+    pickup_lat = models.FloatField()
+    pickup_lng = models.FloatField()
+    preferred_departure_time = models.TimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.course_name} ({self.day_of_week}) for {self.student.username}"
+

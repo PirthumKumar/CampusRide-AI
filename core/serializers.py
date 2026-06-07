@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent
+from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent, Timetable
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -55,6 +56,25 @@ class RideSerializer(serializers.ModelSerializer):
             return Ride.objects.create(driver=driver, **validated_data)
         return super().create(validated_data)
 
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            # Hide exact pickup address if:
+            # 1. User is NOT the driver
+            # 2. User has NO approved booking on this ride
+            is_driver = (instance.driver.id == request.user.id)
+            is_approved_passenger = instance.bookings.filter(
+                passenger=request.user, status='approved'
+            ).exists()
+            
+            if not is_driver and not is_approved_passenger:
+                ret['pickup_address_details'] = 'Hidden until ride accepted'
+        else:
+            ret['pickup_address_details'] = 'Hidden until ride accepted'
+        return ret
+
+
 class BookingSerializer(serializers.ModelSerializer):
     passenger = UserMinSerializer(read_only=True)
     ride = RideSerializer(read_only=True)
@@ -62,8 +82,25 @@ class BookingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Booking
-        fields = ('id', 'ride', 'ride_id', 'passenger', 'seats_booked', 'status', 'created_at')
+        fields = ('id', 'ride', 'ride_id', 'passenger', 'seats_booked', 'status', 'created_at',
+                  'verification_pin', 'verification_token', 'is_verified', 'verified_at', 'ride_status')
         read_only_fields = ('created_at',)
+
+    def to_representation(self, instance):
+        ret = super().to_representation(instance)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            is_passenger = (instance.passenger.id == request.user.id)
+            is_driver = (instance.ride.driver.id == request.user.id)
+            
+            if not is_passenger:
+                ret.pop('verification_pin', None)
+            if not is_passenger and not is_driver:
+                ret.pop('verification_token', None)
+        else:
+            ret.pop('verification_pin', None)
+            ret.pop('verification_token', None)
+        return ret
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_name = serializers.CharField(source='sender.username', read_only=True)
@@ -103,3 +140,24 @@ class SOSEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = SOSEvent
         fields = ('id', 'user', 'user_details', 'ride', 'ride_details', 'latitude', 'longitude', 'status', 'created_at')
+
+
+class TimetableSerializer(serializers.ModelSerializer):
+    student = UserMinSerializer(read_only=True)
+    student_id = serializers.IntegerField(write_only=True, required=False)
+
+    class Meta:
+        model = Timetable
+        fields = ('id', 'student', 'student_id', 'course_name', 'day_of_week', 
+                  'class_start_time', 'class_end_time', 'dropoff_name', 'dropoff_lat', 
+                  'dropoff_lng', 'pickup_name', 'pickup_lat', 'pickup_lng', 
+                  'preferred_departure_time', 'created_at')
+        read_only_fields = ('created_at',)
+
+    def create(self, validated_data):
+        student_id = validated_data.pop('student_id', None)
+        if student_id:
+            student = User.objects.get(id=student_id)
+            return Timetable.objects.create(student=student, **validated_data)
+        return super().create(validated_data)
+
