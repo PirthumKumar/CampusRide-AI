@@ -8,13 +8,24 @@ const CampusMap = {
     tempMarkers: {},
     defaultCenter: [33.6428, 72.9904], // NUST, Islamabad, Pakistan
     defaultZoom: 13,
-    tileLayerUrl: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    tileLayerAttrib: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    tileLayerUrl: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    tileLayerAttrib: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+
 
     init(elementId, onClickCallback = null) {
         if (typeof L === 'undefined') {
             console.error("Leaflet library L is not loaded.");
             return null;
+        }
+
+        // Fix leaflet map default marker icons (crucial for React/Vite/Bundlers)
+        if (L.Icon && L.Icon.Default) {
+            delete L.Icon.Default.prototype._getIconUrl;
+            L.Icon.Default.mergeOptions({
+                iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+                iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            });
         }
 
         if (this.map) {
@@ -33,7 +44,7 @@ const CampusMap = {
             minZoom: 5
         }).setView(this.defaultCenter, this.defaultZoom);
 
-        // Add sleek CartoDB Dark Matter tiles
+        // Add default bright OpenStreetMap tiles
         L.tileLayer(this.tileLayerUrl, {
             attribution: this.tileLayerAttrib,
             maxZoom: 20
@@ -108,6 +119,76 @@ const CampusMap = {
         
         this.tempMarkers[type] = marker;
         this.panTo(lat, lng);
+
+        // Add a route line/polyline between pickup and dropoff if both coordinates exist in tempMarkers
+        this.drawSelectionRoute();
+    },
+
+    // Dynamic routing path calculation for interactive point picks
+    drawSelectionRoute() {
+        if (!this.map) return;
+
+        // Clear previous temporary route line
+        if (this.tempMarkers['selectionRoute']) {
+            this.map.removeLayer(this.tempMarkers['selectionRoute']);
+            delete this.tempMarkers['selectionRoute'];
+        }
+
+        if (this.tempMarkers['pickup'] && this.tempMarkers['dropoff']) {
+            const startCoords = this.tempMarkers['pickup'].getLatLng();
+            const endCoords = this.tempMarkers['dropoff'].getLatLng();
+            const start = [startCoords.lat, startCoords.lng];
+            const end = [endCoords.lat, endCoords.lng];
+
+            // Fetch OSRM route path
+            const url = `https://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson`;
+
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) throw new Error("OSRM routing request failed");
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+                        throw new Error("No route found between coordinates");
+                    }
+                    if (!this.map || !this.tempMarkers['pickup'] || !this.tempMarkers['dropoff']) return;
+
+                    // Clear previous route if any
+                    if (this.tempMarkers['selectionRoute']) {
+                        this.map.removeLayer(this.tempMarkers['selectionRoute']);
+                    }
+
+                    const geometry = data.routes[0].geometry;
+                    const routeLine = L.geoJSON(geometry, {
+                        style: {
+                            color: '#6366f1',
+                            weight: 5,
+                            opacity: 0.75,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        }
+                    }).addTo(this.map);
+
+                    this.tempMarkers['selectionRoute'] = routeLine;
+                })
+                .catch(error => {
+                    console.warn("OSRM temp routing error, drawing fallback line:", error);
+                    if (!this.map || !this.tempMarkers['pickup'] || !this.tempMarkers['dropoff']) return;
+
+                    if (this.tempMarkers['selectionRoute']) {
+                        this.map.removeLayer(this.tempMarkers['selectionRoute']);
+                    }
+
+                    const polyline = L.polyline([start, end], {
+                        color: 'rgba(99, 102, 241, 0.6)',
+                        weight: 3,
+                        dashArray: '5, 10'
+                    }).addTo(this.map);
+
+                    this.tempMarkers['selectionRoute'] = polyline;
+                });
+        }
     },
 
     setSearchMarker(lat, lng, displayName, mapType) {

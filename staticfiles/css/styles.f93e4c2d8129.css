@@ -760,7 +760,7 @@ body {
 .map-container {
     width: 100%;
     height: 100%;
-    background: #eaeaea;
+    background: #0f111c;
     z-index: 10;
 }
 
@@ -1415,13 +1415,13 @@ body {
     z-index: 1010;
     width: calc(100% - 30px);
     max-width: 380px;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(15, 17, 28, 0.85);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -1435,18 +1435,18 @@ body {
 
 .map-search-input {
     flex: 1;
-    background: #f3f4f6;
-    border: 1px solid #d1d5db;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 8px 12px;
-    color: #1f2937;
+    color: white;
     font-size: 13px;
 }
 
 .map-search-input:focus {
     outline: none;
     border-color: var(--primary);
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .map-search-btn {
@@ -1465,8 +1465,8 @@ body {
 }
 
 .map-search-results {
-    background: #ffffff;
-    border: 1px solid #d1d5db;
+    background: #111322;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     max-height: 180px;
     overflow-y: auto;
@@ -1479,13 +1479,13 @@ body {
 .map-search-result-item {
     padding: 8px 12px;
     font-size: 12px;
-    color: #374151;
+    color: var(--text-main);
     cursor: pointer;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .map-search-result-item:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(99, 102, 241, 0.15);
 }
 
 /* Collapsible Turn-by-Turn Route Guidance Box */
@@ -2068,21 +2068,5 @@ body {
     100% {
         box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
         transform: scale(0.95);
-    }
-}
-
-/* Responsive Map Overrides */
-@media (max-width: 768px) {
-    .search-results-section .map-wrapper {
-        height: 320px !important;
-    }
-    .create-ride-section .map-wrapper {
-        height: 280px !important;
-    }
-    .map-search-overlay {
-        width: calc(100% - 20px) !important;
-        left: 10px !important;
-        top: 10px !important;
-        max-width: none !important;
     }
 }

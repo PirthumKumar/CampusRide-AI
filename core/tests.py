@@ -1,7 +1,13 @@
 from django.test import TestCase
 from datetime import date, time
 from .pricing import haversine_distance, is_rush_hour, get_price_prediction
-from .matching import check_route_match, optimize_driver_route
+from .matching import (check_route_match, optimize_driver_route, 
+                       calculate_timetable_match_score, calculate_ride_timetable_match_score)
+from .models import Timetable
+from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
+from rest_framework import status
+
 
 class PricingTests(TestCase):
     def test_haversine_distance(self):
@@ -543,6 +549,177 @@ class GPSTrackingTests(TestCase):
     def test_unauthenticated_user_cannot_update_location(self):
         response = self.client.post(f"/api/rides/{self.ride.id}/location/update/", {"lat": 33.6450, "lng": 72.9920}, format="json")
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+
+class TimetableMatchingTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.User = get_user_model()
+        
+        # Create verified students
+        self.student_a = self.User.objects.create_user(username="student_a", email="a@test.com", password="password123", role="student", verification_status="verified")
+        self.student_b = self.User.objects.create_user(username="student_b", email="b@test.com", password="password123", role="student", verification_status="verified")
+        
+        # Create unverified student
+        self.student_c = self.User.objects.create_user(username="student_c", email="c@test.com", password="password123", role="student", verification_status="unverified")
+        
+        # Create driver
+        self.driver = self.User.objects.create_user(username="driver_tt", email="driver_tt@test.com", password="password123", role="student", verification_status="verified")
+        
+        # Create upcoming driver ride matching student_a schedule (e.g. pickup/dropoff close and on Monday)
+        from .models import Ride
+        self.ride = Ride.objects.create(
+            driver=self.driver,
+            pickup_name="H-12 Hostel", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="NUST SEECS", dropoff_lat=33.6402, dropoff_lng=72.9860,
+            date=date.today(), time="08:15:00", price_per_seat=150.0, vehicle_model="Civic", vehicle_plate="LE-123",
+            is_recurring=True, recurring_days="Monday"
+        )
+        
+        # Create timetable entry for student_a
+        self.tt_a = Timetable.objects.create(
+            student=self.student_a,
+            course_name="Machine Learning",
+            day_of_week="Monday",
+            class_start_time=time(9, 0),
+            class_end_time=time(10, 30),
+            pickup_name="H-12 Hostel", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="NUST SEECS", dropoff_lat=33.6402, dropoff_lng=72.9860,
+            preferred_departure_time=time(8, 30)
+        )
+
+    def test_unverified_student_blocked(self):
+        self.client.force_authenticate(user=self.student_c)
+        
+        # List timetable
+        response = self.client.get("/api/timetable/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # Create timetable
+        response = self.client.post("/api/timetable/", {"course_name": "Math"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_timetable_crud_operations(self):
+        self.client.force_authenticate(user=self.student_a)
+        
+        # 1. List
+        response = self.client.get("/api/timetable/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]["course_name"], "Machine Learning")
+        
+        # 2. Create
+        payload = {
+            "course_name": "Data Structures",
+            "day_of_week": "Tuesday",
+            "class_start_time": "11:00",
+            "class_end_time": "12:30",
+            "pickup_name": "Hostel Block B",
+            "pickup_lat": 33.6432,
+            "pickup_lng": 72.9912,
+            "dropoff_name": "NUST SMME",
+            "dropoff_lat": 33.6415,
+            "dropoff_lng": 72.9840,
+            "preferred_departure_time": "10:30"
+        }
+        response = self.client.post("/api/timetable/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        new_id = response.data["id"]
+        
+        # Verify in DB
+        self.assertEqual(Timetable.objects.filter(student=self.student_a).count(), 2)
+        
+        # 3. Update
+        response = self.client.put(f"/api/timetable/{new_id}/", {"course_name": "Data Structures II"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["course_name"], "Data Structures II")
+        
+        # 4. Delete
+        response = self.client.delete(f"/api/timetable/{new_id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Timetable.objects.filter(student=self.student_a).count(), 1)
+
+    def test_matching_engine_calculations(self):
+        # Create matching schedule for student_b
+        tt_b = Timetable.objects.create(
+            student=self.student_b,
+            course_name="Machine Learning Lab",
+            day_of_week="Monday",
+            class_start_time=time(9, 0),
+            class_end_time=time(10, 30),
+            pickup_name="H-12 Hostel", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="NUST SEECS", dropoff_lat=33.6402, dropoff_lng=72.9860,
+            preferred_departure_time=time(8, 30)
+        )
+        
+        # Score calculation between timetable A and timetable B
+        is_match, score = calculate_timetable_match_score(self.tt_a, tt_b)
+        self.assertTrue(is_match)
+        # They have same pickup, dropoff, start time, departure time, and verified status
+        self.assertTrue(score >= 90)
+        
+        # Score calculation between ride and timetable A
+        is_match_ride, score_ride = calculate_ride_timetable_match_score(self.ride, self.tt_a)
+        self.assertTrue(is_match_ride)
+        self.assertTrue(score_ride >= 90)
+
+    def test_timetable_matches_api_endpoint(self):
+        # Create student_b timetable entry that matches student_a
+        Timetable.objects.create(
+            student=self.student_b,
+            course_name="Machine Learning Lab",
+            day_of_week="Monday",
+            class_start_time=time(9, 0),
+            class_end_time=time(10, 30),
+            pickup_name="H-12 Hostel", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="NUST SEECS", dropoff_lat=33.6402, dropoff_lng=72.9860,
+            preferred_departure_time=time(8, 30)
+        )
+        
+        self.client.force_authenticate(user=self.student_a)
+        response = self.client.get(f"/api/timetable/matches/?timetable_id={self.tt_a.id}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        # Check matching rides
+        self.assertEqual(len(response.data["matched_rides"]), 1)
+        self.assertEqual(response.data["matched_rides"][0]["ride"]["id"], self.ride.id)
+        
+        # Check matching student classmate schedules
+        self.assertEqual(len(response.data["matched_students"]), 1)
+        self.assertEqual(response.data["matched_students"][0]["student"]["username"], "student_b")
+        
+        # Verify privacy: coordinates must NOT be serialized in matched student list
+        self.assertNotIn("pickup_lat", response.data["matched_students"][0])
+        self.assertNotIn("pickup_lng", response.data["matched_students"][0])
+        self.assertNotIn("dropoff_lat", response.data["matched_students"][0])
+        self.assertNotIn("dropoff_lng", response.data["matched_students"][0])
+
+    def test_create_recurring_ride_from_timetable_endpoint(self):
+        self.client.force_authenticate(user=self.student_a)
+        
+        payload = {
+            "timetable_id": self.tt_a.id,
+            "price_per_seat": 120.00,
+            "vehicle_model": "Honda Civic",
+            "vehicle_plate": "LED-456",
+            "vehicle_type": "car",
+            "seats_total": 4,
+            "notes": "Fast track route"
+        }
+        
+        response = self.client.post("/api/timetable/create-recurring-ride/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+        # Verify ride was created in database
+        from .models import Ride
+        rides = Ride.objects.filter(driver=self.student_a, is_recurring=True)
+        self.assertEqual(rides.count(), 1)
+        created_ride = rides.first()
+        self.assertEqual(created_ride.pickup_name, self.tt_a.pickup_name)
+        self.assertEqual(created_ride.dropoff_name, self.tt_a.dropoff_name)
+        self.assertEqual(created_ride.recurring_days, "Monday")
+        self.assertEqual(created_ride.price_per_seat, 120.00)
+
 
 
 

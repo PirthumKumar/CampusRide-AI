@@ -70,8 +70,6 @@ class RideSerializer(serializers.ModelSerializer):
             
             if not is_driver and not is_approved_passenger:
                 ret['pickup_address_details'] = 'Hidden until ride accepted'
-        else:
-            ret['pickup_address_details'] = 'Hidden until ride accepted'
         return ret
 
 

@@ -129,11 +129,12 @@ const App = {
         }
         
         // Hide all views
-        const subviews = ['dashboard', 'search', 'create', 'bookings', 'chat', 'verification', 'admin'];
+        const subviews = ['dashboard', 'search', 'create', 'bookings', 'timetable', 'timetable-matches', 'chat', 'verification', 'admin'];
         subviews.forEach(v => {
             const el = document.getElementById(`view-${v}`);
             if (el) el.style.display = 'none';
         });
+
     },
 
     startPolling() {
@@ -481,7 +482,9 @@ const App = {
             'bookings': { title: 'My Bookings', sub: 'Review ride request approvals and reservation tickets.' },
             'chat': { title: 'In-App Messages', sub: 'Chat with other students before booking rides.' },
             'verification': { title: 'Student Verification', sub: 'Manage verification badges and profile parameters.' },
-            'admin': { title: 'Admin Controls', sub: 'Verify students, inspect reports, and moderate complaints.' }
+            'admin': { title: 'Admin Controls', sub: 'Verify students, inspect reports, and moderate complaints.' },
+            'timetable': { title: 'Weekly Class Timetable', sub: 'Organize your weekly class schedule to discover matching drivers and riders.' },
+            'timetable-matches': { title: 'AI Suggested Ride Matches', sub: 'Smart recommendations to share rides with classmates going your way.' }
         };
 
         const config = headers[viewName] || { title: 'CampusRide', sub: '' };
@@ -498,7 +501,8 @@ const App = {
         });
 
         // Hide all views, display active
-        const subviews = ['dashboard', 'search', 'create', 'bookings', 'chat', 'verification', 'admin'];
+        const subviews = ['dashboard', 'search', 'create', 'bookings', 'timetable', 'timetable-matches', 'chat', 'verification', 'admin'];
+
         subviews.forEach(v => {
             const el = document.getElementById(`view-${v}`);
             if (el) el.style.display = (v === viewName) ? 'block' : 'none';
@@ -523,8 +527,11 @@ const App = {
             this.loadVerificationPage();
         } else if (viewName === 'admin') {
             this.loadAdminPage();
+        } else if (viewName === 'timetable') {
+            this.loadTimetablePage();
         }
     },
+
 
     // ----------------------------------------------------
     // VIEW CONTROLLERS
@@ -2749,7 +2756,105 @@ const App = {
                 this.stopCameraScanner();
             });
         }
+
+        // --- Timetable Event Listeners ---
+        const addTimetableEntryBtn = document.getElementById('addTimetableEntryBtn');
+        if (addTimetableEntryBtn) {
+            addTimetableEntryBtn.addEventListener('click', () => {
+                this.openTimetableFormModal();
+            });
+        }
+
+        const closeTimetableModalBtn = document.getElementById('closeTimetableModalBtn');
+        const cancelTimetableBtn = document.getElementById('cancelTimetableBtn');
+        const timetableFormModal = document.getElementById('timetableFormModal');
+        if (closeTimetableModalBtn && timetableFormModal) {
+            closeTimetableModalBtn.addEventListener('click', () => {
+                timetableFormModal.style.display = 'none';
+            });
+        }
+        if (cancelTimetableBtn && timetableFormModal) {
+            cancelTimetableBtn.addEventListener('click', () => {
+                timetableFormModal.style.display = 'none';
+            });
+        }
+
+        const timetableForm = document.getElementById('timetableForm');
+        if (timetableForm) {
+            timetableForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveTimetable();
+            });
+        }
+
+        const timetablePickPickupBtn = document.getElementById('timetablePickPickupBtn');
+        if (timetablePickPickupBtn) {
+            timetablePickPickupBtn.addEventListener('click', () => {
+                this.timetableActivePoint = 'pickup';
+                timetablePickPickupBtn.classList.add('btn-primary');
+                timetablePickPickupBtn.classList.remove('btn-secondary');
+                document.getElementById('timetablePickDropoffBtn').classList.add('btn-secondary');
+                document.getElementById('timetablePickDropoffBtn').classList.remove('btn-primary');
+                document.getElementById('timetableMapInstruction').innerHTML = '<i class="ri-information-line"></i> Click the map to place the Pickup marker.';
+            });
+        }
+
+        const timetablePickDropoffBtn = document.getElementById('timetablePickDropoffBtn');
+        if (timetablePickDropoffBtn) {
+            timetablePickDropoffBtn.addEventListener('click', () => {
+                this.timetableActivePoint = 'dropoff';
+                timetablePickDropoffBtn.classList.add('btn-primary');
+                timetablePickDropoffBtn.classList.remove('btn-secondary');
+                document.getElementById('timetablePickPickupBtn').classList.add('btn-secondary');
+                document.getElementById('timetablePickPickupBtn').classList.remove('btn-primary');
+                document.getElementById('timetableMapInstruction').innerHTML = '<i class="ri-information-line"></i> Click the map to place the Destination marker.';
+            });
+        }
+
+        const timetableMapBtn = document.getElementById('timetableMapBtn');
+        const timetableMapQuery = document.getElementById('timetableMapQuery');
+        if (timetableMapBtn && timetableMapQuery) {
+            timetableMapBtn.addEventListener('click', () => {
+                this.searchPakistanLocations(timetableMapQuery.value.trim(), 'timetable');
+            });
+            timetableMapQuery.addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    timetableMapBtn.click();
+                }
+            });
+        }
+
+        const backToTimetableBtn = document.getElementById('backToTimetableBtn');
+        if (backToTimetableBtn) {
+            backToTimetableBtn.addEventListener('click', () => {
+                this.showView('timetable');
+            });
+        }
+
+        // Recurring Ride Create Modals
+        const closeTimetableCreateRideModalBtn = document.getElementById('closeTimetableCreateRideModalBtn');
+        const cancelTimetableCreateRideBtn = document.getElementById('cancelTimetableCreateRideBtn');
+        const timetableCreateRideModal = document.getElementById('timetableCreateRideModal');
+        if (closeTimetableCreateRideModalBtn && timetableCreateRideModal) {
+            closeTimetableCreateRideModalBtn.addEventListener('click', () => {
+                timetableCreateRideModal.style.display = 'none';
+            });
+        }
+        if (cancelTimetableCreateRideBtn && timetableCreateRideModal) {
+            cancelTimetableCreateRideBtn.addEventListener('click', () => {
+                timetableCreateRideModal.style.display = 'none';
+            });
+        }
+
+        const timetableCreateRideForm = document.getElementById('timetableCreateRideForm');
+        if (timetableCreateRideForm) {
+            timetableCreateRideForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveTimetableCreateRecurringRide();
+            });
+        }
     },
+
 
     openVerificationModal(bookingId, passengerName, token) {
         this.currentVerifyBookingId = bookingId;
@@ -2940,6 +3045,408 @@ const App = {
         }
     },
 
+    // --- Timetable Controllers ---
+    timetableActivePoint: 'pickup',
+    timetableMap: null,
+    timetableEntries: [],
+    timetableActiveEntryId: null,
+
+    switchView(viewName) {
+        this.showView(viewName);
+    },
+
+    async loadTimetablePage() {
+        const lockEl = document.getElementById('timetableVerificationLock');
+        const contentEl = document.getElementById('timetableContentArea');
+        if (!lockEl || !contentEl) return;
+
+        if (this.currentUser.verification_status !== 'verified') {
+            lockEl.style.display = 'block';
+            contentEl.style.display = 'none';
+            return;
+        } else {
+            lockEl.style.display = 'none';
+            contentEl.style.display = 'block';
+        }
+
+        const res = await API.getTimetables();
+        if (res.data && !res.error) {
+            this.timetableEntries = res.data;
+            this.renderWeeklyTimetable(res.data);
+        } else {
+            this.showToast(res.error || "Failed to fetch timetable entries", "error");
+        }
+    },
+
+    renderWeeklyTimetable(entries) {
+        const grid = document.getElementById('weeklyTimetableGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        days.forEach(day => {
+            const dayEntries = entries.filter(e => e.day_of_week.toLowerCase() === day.toLowerCase());
+            
+            const col = document.createElement('div');
+            col.className = 'card day-column';
+            col.style.padding = '12px';
+            col.style.minHeight = '200px';
+            col.style.display = 'flex';
+            col.style.flexDirection = 'column';
+            col.style.gap = '10px';
+            col.style.background = 'rgba(255, 255, 255, 0.01)';
+            col.style.border = '1px solid var(--border-color)';
+
+            let classesHtml = '';
+            if (dayEntries.length === 0) {
+                classesHtml = '<div style="color:var(--text-muted);font-size:12px;text-align:center;margin-top:20px;font-style:italic;">No classes</div>';
+            } else {
+                dayEntries.forEach(e => {
+                    const formatTime = (t) => {
+                        const parts = t.split(':');
+                        const h = parseInt(parts[0]);
+                        const m = parts[1];
+                        const ampm = h >= 12 ? 'PM' : 'AM';
+                        const displayH = h % 12 || 12;
+                        return `${displayH}:${m} ${ampm}`;
+                    };
+                    const startFormatted = formatTime(e.class_start_time);
+                    const endFormatted = formatTime(e.class_end_time);
+                    const deptFormatted = formatTime(e.preferred_departure_time);
+
+                    classesHtml += `
+                        <div class="timetable-class-item card" style="padding:10px;background:rgba(255, 255, 255, 0.02);border:1px solid var(--border-color);border-radius:var(--radius-sm);font-size:12px;display:flex;flex-direction:column;gap:4px;">
+                            <div style="font-weight:700;color:var(--primary);font-size:12px;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${e.course_name}">${e.course_name}</div>
+                            <div><i class="ri-time-line"></i> ${startFormatted} - ${endFormatted}</div>
+                            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${e.pickup_name}"><i class="ri-map-pin-user-line" style="color:var(--primary);"></i> ${e.pickup_name}</div>
+                            <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${e.dropoff_name}"><i class="ri-map-pin-5-line" style="color:var(--secondary);"></i> ${e.dropoff_name}</div>
+                            <div style="font-style:italic;color:var(--text-muted);margin-top:2px;"><i class="ri-steering-fill"></i> Dept: ${deptFormatted}</div>
+                            <div style="display:flex;gap:4px;margin-top:10px;justify-content:flex-end;border-top:1px solid rgba(255,255,255,0.05);padding-top:8px;">
+                                <button class="btn btn-primary btn-sm" onclick="App.showTimetableMatches(${e.id})" style="font-size:9px;padding:2px 6px;" title="Find matches"><i class="ri-sparkling-line"></i> Match</button>
+                                <button class="btn btn-secondary btn-sm" onclick="App.openTimetableFormModal(${e.id})" style="font-size:9px;padding:2px 4px;" title="Edit"><i class="ri-edit-line"></i></button>
+                                <button class="btn btn-danger btn-sm" onclick="App.deleteTimetableEntry(${e.id})" style="font-size:9px;padding:2px 4px;" title="Delete"><i class="ri-delete-bin-line"></i></button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            col.innerHTML = `
+                <h4 style="font-family:var(--font-heading);font-weight:800;border-bottom:2px solid var(--primary);padding-bottom:4px;margin-bottom:8px;font-size:13px;text-align:center;">${day}</h4>
+                <div style="display:flex;flex-direction:column;gap:8px;flex:1;">
+                    ${classesHtml}
+                </div>
+            `;
+            grid.appendChild(col);
+        });
+    },
+
+    openTimetableFormModal(entryId = null) {
+        this.timetableActiveEntryId = entryId;
+        const modal = document.getElementById('timetableFormModal');
+        const form = document.getElementById('timetableForm');
+        if (!modal || !form) return;
+
+        form.reset();
+        
+        document.getElementById('timetablePickupLat').value = '';
+        document.getElementById('timetablePickupLng').value = '';
+        document.getElementById('timetableDropoffLat').value = '';
+        document.getElementById('timetableDropoffLng').value = '';
+
+        this.timetableActivePoint = 'pickup';
+        document.getElementById('timetablePickPickupBtn').classList.add('btn-primary');
+        document.getElementById('timetablePickPickupBtn').classList.remove('btn-secondary');
+        document.getElementById('timetablePickDropoffBtn').classList.add('btn-secondary');
+        document.getElementById('timetablePickDropoffBtn').classList.remove('btn-primary');
+        document.getElementById('timetableMapInstruction').innerHTML = '<i class="ri-information-line"></i> Click the map to place the Pickup marker.';
+
+        if (entryId) {
+            document.getElementById('timetableModalTitle').innerText = "Edit Class Schedule";
+            const entry = this.timetableEntries.find(e => e.id === entryId);
+            if (entry) {
+                document.getElementById('timetableEntryId').value = entry.id;
+                document.getElementById('timetableCourseName').value = entry.course_name;
+                document.getElementById('timetableDayOfWeek').value = entry.day_of_week;
+                
+                const formatInputTime = (t) => t.substring(0, 5);
+                document.getElementById('timetableClassStartTime').value = formatInputTime(entry.class_start_time);
+                document.getElementById('timetableClassEndTime').value = formatInputTime(entry.class_end_time);
+                document.getElementById('timetablePreferredDepartureTime').value = formatInputTime(entry.preferred_departure_time);
+
+                document.getElementById('timetablePickupName').value = entry.pickup_name;
+                document.getElementById('timetablePickupLat').value = entry.pickup_lat;
+                document.getElementById('timetablePickupLng').value = entry.pickup_lng;
+
+                document.getElementById('timetableDropoffName').value = entry.dropoff_name;
+                document.getElementById('timetableDropoffLat').value = entry.dropoff_lat;
+                document.getElementById('timetableDropoffLng').value = entry.dropoff_lng;
+            }
+        } else {
+            document.getElementById('timetableModalTitle').innerText = "Add Class Schedule";
+            document.getElementById('timetableEntryId').value = "";
+        }
+
+        modal.style.display = 'flex';
+
+        setTimeout(() => {
+            this.timetableMap = CampusMap.init('timetableMapCanvas', (lat, lng) => {
+                this.handleTimetableMapClick(lat, lng);
+            });
+
+            if (entryId) {
+                const entry = this.timetableEntries.find(e => e.id === entryId);
+                if (entry) {
+                    CampusMap.setSelectionMarker('pickup', entry.pickup_lat, entry.pickup_lng, entry.pickup_name);
+                    CampusMap.setSelectionMarker('dropoff', entry.dropoff_lat, entry.dropoff_lng, entry.dropoff_name);
+                    
+                    const bounds = L.latLngBounds(
+                        [entry.pickup_lat, entry.pickup_lng],
+                        [entry.dropoff_lat, entry.dropoff_lng]
+                    );
+                    if (this.timetableMap) this.timetableMap.fitBounds(bounds, { padding: [30, 30] });
+                }
+            }
+        }, 150);
+    },
+
+    handleTimetableMapClick(lat, lng) {
+        if (this.timetableActivePoint === 'pickup') {
+            document.getElementById('timetablePickupLat').value = lat.toFixed(6);
+            document.getElementById('timetablePickupLng').value = lng.toFixed(6);
+            CampusMap.setSelectionMarker('pickup', lat, lng, "Pickup Point");
+        } else {
+            document.getElementById('timetableDropoffLat').value = lat.toFixed(6);
+            document.getElementById('timetableDropoffLng').value = lng.toFixed(6);
+            CampusMap.setSelectionMarker('dropoff', lat, lng, "Destination Point");
+        }
+    },
+
+    async saveTimetable() {
+        const id = document.getElementById('timetableEntryId').value;
+        const course_name = document.getElementById('timetableCourseName').value.trim();
+        const day_of_week = document.getElementById('timetableDayOfWeek').value;
+        const class_start_time = document.getElementById('timetableClassStartTime').value;
+        const class_end_time = document.getElementById('timetableClassEndTime').value;
+        const preferred_departure_time = document.getElementById('timetablePreferredDepartureTime').value;
+
+        const pickup_name = document.getElementById('timetablePickupName').value.trim();
+        const pickup_lat = parseFloat(document.getElementById('timetablePickupLat').value);
+        const pickup_lng = parseFloat(document.getElementById('timetablePickupLng').value);
+
+        const dropoff_name = document.getElementById('timetableDropoffName').value.trim();
+        const dropoff_lat = parseFloat(document.getElementById('timetableDropoffLat').value);
+        const dropoff_lng = parseFloat(document.getElementById('timetableDropoffLng').value);
+
+        if (!pickup_lat || !pickup_lng || !dropoff_lat || !dropoff_lng) {
+            alert("Please select both Pickup and Dropoff locations on the map.");
+            return;
+        }
+
+        const data = {
+            course_name, day_of_week, class_start_time, class_end_time, preferred_departure_time,
+            pickup_name, pickup_lat, pickup_lng, dropoff_name, dropoff_lat, dropoff_lng
+        };
+
+        let res;
+        if (id) {
+            res = await API.updateTimetable(id, data);
+        } else {
+            res = await API.addTimetable(data);
+        }
+
+        if (res.data && !res.error) {
+            this.showToast(id ? "Schedule updated successfully" : "Schedule added successfully", "success");
+            document.getElementById('timetableFormModal').style.display = 'none';
+            this.loadTimetablePage();
+        } else {
+            this.showToast(res.error || "Failed to save timetable schedule", "error");
+        }
+    },
+
+    async deleteTimetableEntry(id) {
+        if (!confirm("Are you sure you want to delete this class schedule?")) return;
+
+        const res = await API.deleteTimetable(id);
+        if (res.status === 204 || (!res.error)) {
+            this.showToast("Schedule deleted successfully", "success");
+            this.loadTimetablePage();
+        } else {
+            this.showToast(res.error || "Failed to delete schedule", "error");
+        }
+    },
+
+    showTimetableMatches(id) {
+        this.showView('timetable-matches');
+        this.loadTimetableMatchesData(id);
+    },
+
+    async loadTimetableMatchesData(id) {
+        const ridesNode = document.getElementById('timetableMatchedRidesNode');
+        const studentsNode = document.getElementById('timetableMatchedStudentsNode');
+        if (!ridesNode || !studentsNode) return;
+
+        ridesNode.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Finding matched rides...</div>';
+        studentsNode.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Finding matching classmates...</div>';
+        document.getElementById('timetableMatchRecommendationText').innerText = "Analyzing schedules and coordinates...";
+
+        const res = await API.getTimetableMatches(id);
+        if (res.error || !res.data) {
+            this.showToast(res.error || "Failed to load matches", "error");
+            return;
+        }
+
+        const data = res.data;
+        document.getElementById('timetableMatchSubTitle').innerText = `Matches for ${data.timetable.course_name} (${data.timetable.day_of_week})`;
+        document.getElementById('timetableMatchRecommendationText').innerText = data.recommendation_message || "No recommendations at this time.";
+
+        // 1. Render Matched Rides
+        ridesNode.innerHTML = '';
+        if (data.matched_rides.length === 0) {
+            ridesNode.innerHTML = '<div style="text-align:center;padding:25px;color:var(--text-muted);font-style:italic;">No matching driver rides found. Try creating a recurring ride below!</div>';
+        } else {
+            data.matched_rides.forEach(m => {
+                const r = m.ride;
+                const scoreColor = m.match_score >= 90 ? '#22c55e' : (m.match_score >= 75 ? '#eab308' : '#3b82f6');
+                const card = document.createElement('div');
+                card.className = 'card ride-match-item';
+                card.style.padding = '12px';
+                card.style.marginBottom = '12px';
+                card.style.background = 'rgba(255, 255, 255, 0.02)';
+                card.style.border = '1px solid var(--border-color)';
+                card.style.display = 'flex';
+                card.style.justifyContent = 'space-between';
+                card.style.alignItems = 'center';
+
+                card.innerHTML = `
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                            <span style="font-weight:700;font-size:13px;color:var(--text-color);">@${r.driver.username}</span>
+                            <span class="report-status-badge pending" style="background:${scoreColor}20;color:${scoreColor};font-size:10px;font-weight:700;padding:2px 6px;">${m.match_score}% Match</span>
+                            ${r.driver.verification_status === 'verified' ? '<span style="color:var(--accent);font-size:11px;" title="Verified Student"><i class="ri-checkbox-circle-fill"></i></span>' : ''}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:2px;">
+                            <div><i class="ri-map-pin-user-line"></i> Pickup: ${r.pickup_name}</div>
+                            <div><i class="ri-map-pin-5-line"></i> Dropoff: ${r.dropoff_name}</div>
+                            <div><i class="ri-time-line"></i> Time: ${r.time.substring(0, 5)} (Rs. ${parseInt(r.price_per_seat)} / seat)</div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary btn-sm" onclick="App.joinTimetableRide(${r.id})" style="font-size:11px;padding:4px 8px;">Join Ride</button>
+                    </div>
+                `;
+                ridesNode.appendChild(card);
+            });
+        }
+
+        // 2. Render Matched Students
+        studentsNode.innerHTML = '';
+        if (data.matched_students.length === 0) {
+            studentsNode.innerHTML = `
+                <div style="text-align:center;padding:25px;color:var(--text-muted);font-style:italic;display:flex;flex-direction:column;gap:12px;align-items:center;">
+                    <span>No classmate matches found near your route.</span>
+                    <button class="btn btn-secondary btn-sm" onclick="App.openTimetableCreateRideModal(${data.timetable.id})"><i class="ri-add-line"></i> Create Recurring Ride</button>
+                </div>
+            `;
+        } else {
+            const headerBtnNode = document.createElement('div');
+            headerBtnNode.style.marginBottom = '12px';
+            headerBtnNode.style.textAlign = 'right';
+            headerBtnNode.innerHTML = `
+                <button class="btn btn-secondary btn-sm" onclick="App.openTimetableCreateRideModal(${data.timetable.id})" style="font-size:11px;padding:6px 10px;"><i class="ri-steering-fill"></i> Create Shared Ride</button>
+            `;
+            studentsNode.appendChild(headerBtnNode);
+
+            data.matched_students.forEach(s => {
+                const scoreColor = s.match_score >= 90 ? '#22c55e' : (s.match_score >= 75 ? '#eab308' : '#3b82f6');
+                const card = document.createElement('div');
+                card.className = 'card student-match-item';
+                card.style.padding = '12px';
+                card.style.marginBottom = '12px';
+                card.style.background = 'rgba(255, 255, 255, 0.02)';
+                card.style.border = '1px solid var(--border-color)';
+                card.style.display = 'flex';
+                card.style.justifyContent = 'space-between';
+                card.style.alignItems = 'center';
+
+                card.innerHTML = `
+                    <div style="flex:1;">
+                        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                            <img src="${s.student.avatar_url || '/static/images/default-avatar.png'}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;" />
+                            <span style="font-weight:700;font-size:13px;color:var(--text-color);">@${s.student.username}</span>
+                            <span class="report-status-badge pending" style="background:${scoreColor}20;color:${scoreColor};font-size:10px;font-weight:700;padding:2px 6px;">${s.match_score}% Match</span>
+                            ${s.student.verification_status === 'verified' ? '<span style="color:var(--accent);font-size:11px;"><i class="ri-checkbox-circle-fill"></i></span>' : ''}
+                        </div>
+                        <div style="font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:2px;">
+                            <div><i class="ri-map-pin-user-line"></i> Pickup Area: ${s.pickup_name}</div>
+                            <div><i class="ri-map-pin-5-line"></i> Destination: ${s.dropoff_name}</div>
+                            <div><i class="ri-time-line"></i> Class: ${s.class_start_time} | Dept: ${s.preferred_departure_time}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <button class="btn btn-secondary btn-sm" onclick="App.initiateChatWithStudent(${s.student.id}, '${s.student.username}')" style="padding:4px 6px;" title="Chat with classmate"><i class="ri-chat-3-line"></i></button>
+                    </div>
+                `;
+                studentsNode.appendChild(card);
+            });
+        }
+    },
+
+    async joinTimetableRide(rideId) {
+        if (!confirm("Would you like to book a seat on this ride matching your schedule?")) return;
+
+        const res = await API.createBooking(rideId, 1);
+        if (res.data && !res.error) {
+            this.showToast("Booking request sent to driver successfully!", "success");
+            this.showView('bookings');
+        } else {
+            this.showToast(res.error || "Failed to create booking", "error");
+        }
+    },
+
+    initiateChatWithStudent(studentId, username) {
+        this.showView('chat');
+        this.selectConversation(studentId, username, "University Member", "/static/images/default-avatar.png");
+    },
+
+    openTimetableCreateRideModal(timetableId) {
+        const modal = document.getElementById('timetableCreateRideModal');
+        const form = document.getElementById('timetableCreateRideForm');
+        if (!modal || !form) return;
+
+        form.reset();
+        document.getElementById('timetableCreateRideId').value = timetableId;
+        modal.style.display = 'flex';
+    },
+
+    async saveTimetableCreateRecurringRide() {
+        const id = document.getElementById('timetableCreateRideId').value;
+        const price = parseFloat(document.getElementById('timetableCreateRidePrice').value);
+        const type = document.getElementById('timetableCreateRideVehicleType').value;
+        const seats = parseInt(document.getElementById('timetableCreateRideSeats').value);
+        const model = document.getElementById('timetableCreateRideVehicleModel').value.trim();
+        const plate = document.getElementById('timetableCreateRideVehiclePlate').value.trim();
+        const notes = document.getElementById('timetableCreateRideNotes').value.trim();
+
+        const data = {
+            price_per_seat: price,
+            vehicle_type: type,
+            seats_total: seats,
+            vehicle_model: model,
+            vehicle_plate: plate,
+            notes: notes
+        };
+
+        const res = await API.createRecurringRideFromTimetable(id, data);
+        if (res.data && !res.error) {
+            this.showToast("Recurring ride created successfully based on timetable schedule!", "success");
+            document.getElementById('timetableCreateRideModal').style.display = 'none';
+            this.showView('dashboard');
+        } else {
+            this.showToast(res.error || "Failed to create recurring ride", "error");
+        }
+    },
+
     showToast(message, type = "info") {
         const stack = document.getElementById('toastStackNode');
         if (!stack) return;
@@ -2964,6 +3471,7 @@ const App = {
         }, 5000);
     }
 };
+
 
 window.App = App;
 
@@ -3026,6 +3534,19 @@ window.setPointFromSearch = function(mapType, pointType, lat, lng, name) {
         CampusMap.clearSearchMarker();
         
         App.checkAndTraceRoute('create');
+    } else if (mapType === 'timetable') {
+        if (pointType === 'pickup') {
+            document.getElementById('timetablePickupLat').value = lat.toFixed(6);
+            document.getElementById('timetablePickupLng').value = lng.toFixed(6);
+            document.getElementById('timetablePickupName').value = name;
+            CampusMap.setSelectionMarker('pickup', lat, lng, name);
+        } else {
+            document.getElementById('timetableDropoffLat').value = lat.toFixed(6);
+            document.getElementById('timetableDropoffLng').value = lng.toFixed(6);
+            document.getElementById('timetableDropoffName').value = name;
+            CampusMap.setSelectionMarker('dropoff', lat, lng, name);
+        }
+        CampusMap.clearSearchMarker();
     }
 };
 

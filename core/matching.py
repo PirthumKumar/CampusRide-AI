@@ -157,6 +157,19 @@ def optimize_driver_route(driver_start, driver_end, bookings):
     return route, round(min_dist, 2)
 
 
+def parse_time_to_minutes(val):
+    """
+    Helper to convert a time string ("HH:MM:SS" or "HH:MM") or datetime.time object
+    into total minutes since midnight.
+    """
+    if not val:
+        return 0
+    if isinstance(val, str):
+        parts = val.split(':')
+        return int(parts[0]) * 60 + int(parts[1])
+    return val.hour * 60 + val.minute
+
+
 def calculate_timetable_match_score(t1, t2):
     """
     Compares two timetable entries to see if they are a match.
@@ -177,8 +190,8 @@ def calculate_timetable_match_score(t1, t2):
         return False, 0
 
     # 4. Class start time difference <= 60 mins
-    m1 = t1.class_start_time.hour * 60 + t1.class_start_time.minute
-    m2 = t2.class_start_time.hour * 60 + t2.class_start_time.minute
+    m1 = parse_time_to_minutes(t1.class_start_time)
+    m2 = parse_time_to_minutes(t2.class_start_time)
     diff_start = abs(m1 - m2)
     if diff_start > 60:
         return False, 0
@@ -213,8 +226,8 @@ def calculate_timetable_match_score(t1, t2):
         start_pts = 10
 
     # Preferred departure difference (max 20)
-    d1 = t1.preferred_departure_time.hour * 60 + t1.preferred_departure_time.minute
-    d2 = t2.preferred_departure_time.hour * 60 + t2.preferred_departure_time.minute
+    d1 = parse_time_to_minutes(t1.preferred_departure_time)
+    d2 = parse_time_to_minutes(t2.preferred_departure_time)
     diff_dept = abs(d1 - d2)
     if diff_dept <= 15:
         dept_pts = 20
@@ -273,8 +286,8 @@ def calculate_ride_timetable_match_score(ride, t):
         return False, 0
 
     # 4. Ride departure must be BEFORE class start time
-    r_mins = ride.time.hour * 60 + ride.time.minute
-    c_mins = t.class_start_time.hour * 60 + t.class_start_time.minute
+    r_mins = parse_time_to_minutes(ride.time)
+    c_mins = parse_time_to_minutes(t.class_start_time)
     if r_mins > c_mins:
         return False, 0
 
@@ -300,7 +313,7 @@ def calculate_ride_timetable_match_score(ride, t):
         dropoff_pts = 15
 
     # Departure time offset vs preferred departure (max 30)
-    p_mins = t.preferred_departure_time.hour * 60 + t.preferred_departure_time.minute
+    p_mins = parse_time_to_minutes(t.preferred_departure_time)
     diff_dept = abs(r_mins - p_mins)
     
     if diff_dept <= 15:
@@ -322,4 +335,5 @@ def calculate_ride_timetable_match_score(ride, t):
     total_pts = pickup_pts + dropoff_pts + dept_pts + trust_pts
     match_percentage = min(100, int((total_pts / 100.0) * 100))
     return True, match_percentage
+
 
