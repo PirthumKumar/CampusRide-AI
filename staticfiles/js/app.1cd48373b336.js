@@ -16,7 +16,7 @@ const App = {
     conversations: [],
     activeConvoId: null,
     lastFetchedMessageId: 0,
-    notifications: null,
+    notifications: [],
     activeRideDetail: null,
     
     // Create Ride Flow states
@@ -119,7 +119,6 @@ const App = {
             this.driverGeolocateWatchId = null;
         }
         this.activeStartedRideId = null;
-        this.notifications = null;
         
         document.getElementById('sidebarNode').style.display = 'none';
         document.getElementById('headerNode').style.display = 'none';
@@ -166,15 +165,13 @@ const App = {
                 badgeEl.innerText = newNotis.length;
                 badgeEl.style.display = 'block';
                 
-                // Pop toasts for brand new unread notifications (only if notifications have been initialized once, avoiding popup storm on login)
-                if (this.notifications !== null) {
-                    newNotis.forEach(n => {
-                        const exists = this.notifications.some(existing => existing.id === n.id);
-                        if (!exists) {
-                            this.showNotificationToast(n);
-                        }
-                    });
-                }
+                // Pop toasts for brand new unread notifications
+                newNotis.forEach(n => {
+                    const exists = this.notifications.some(existing => existing.id === n.id);
+                    if (!exists) {
+                        this.showNotificationToast(n);
+                    }
+                });
             } else {
                 badgeEl.style.display = 'none';
             }
@@ -2458,12 +2455,12 @@ const App = {
                 this.renderNotificationsDropdown();
                 
                 // If there are unread notifications, mark them as read
-                const hasUnread = this.notifications && this.notifications.some(n => !n.is_read);
+                const hasUnread = this.notifications.some(n => !n.is_read);
                 if (hasUnread) {
                     await API.markNotificationsRead();
                     const badge = document.getElementById('notiBadge');
                     if (badge) badge.style.display = 'none';
-                    if (this.notifications) this.notifications.forEach(n => n.is_read = true);
+                    this.notifications.forEach(n => n.is_read = true);
                 }
             }
         });
@@ -2485,7 +2482,7 @@ const App = {
                 await API.markNotificationsRead();
                 const badge = document.getElementById('notiBadge');
                 if (badge) badge.style.display = 'none';
-                if (this.notifications) this.notifications.forEach(n => n.is_read = true);
+                this.notifications.forEach(n => n.is_read = true);
                 this.renderNotificationsDropdown();
             });
         }

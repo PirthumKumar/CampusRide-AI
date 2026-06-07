@@ -16,7 +16,7 @@ const App = {
     conversations: [],
     activeConvoId: null,
     lastFetchedMessageId: 0,
-    notifications: [],
+    notifications: null,
     activeRideDetail: null,
     
     // Create Ride Flow states
@@ -38,7 +38,7 @@ const App = {
     },
 
     async init() {
-        console.log("CampusRide Initializing...");
+        console.log("CampusRide AI Initializing...");
         
         // 1. Session check
         const { data, error } = await API.me();
@@ -76,8 +76,10 @@ const App = {
         // Show/hide Admin Navigation
         if (this.currentUser.is_staff) {
             document.getElementById('adminNavNode').style.display = 'block';
+            document.getElementById('adminCopilotNavNode').style.display = 'block';
         } else {
             document.getElementById('adminNavNode').style.display = 'none';
+            document.getElementById('adminCopilotNavNode').style.display = 'none';
         }
 
         // Dynamic Role-based Navigation menu items filtering
@@ -117,6 +119,7 @@ const App = {
             this.driverGeolocateWatchId = null;
         }
         this.activeStartedRideId = null;
+        this.notifications = null;
         
         document.getElementById('sidebarNode').style.display = 'none';
         document.getElementById('headerNode').style.display = 'none';
@@ -163,13 +166,15 @@ const App = {
                 badgeEl.innerText = newNotis.length;
                 badgeEl.style.display = 'block';
                 
-                // Pop toasts for brand new unread notifications
-                newNotis.forEach(n => {
-                    const exists = this.notifications.some(existing => existing.id === n.id);
-                    if (!exists) {
-                        this.showNotificationToast(n);
-                    }
-                });
+                // Pop toasts for brand new unread notifications (only if notifications have been initialized once, avoiding popup storm on login)
+                if (this.notifications !== null) {
+                    newNotis.forEach(n => {
+                        const exists = this.notifications.some(existing => existing.id === n.id);
+                        if (!exists) {
+                            this.showNotificationToast(n);
+                        }
+                    });
+                }
             } else {
                 badgeEl.style.display = 'none';
             }
@@ -463,6 +468,14 @@ const App = {
             return;
         }
 
+        if (viewName === 'admin-copilot' && (!this.currentUser || (!this.currentUser.is_staff && this.currentUser.role !== 'admin'))) {
+            console.warn("Access denied: Admin role required.");
+            if (this.currentView !== 'dashboard') {
+                this.showView('dashboard');
+            }
+            return;
+        }
+
         // Enforce role-based access control for search view
         if (viewName === 'search' && this.currentUser && this.currentUser.role === 'external_driver') {
             console.warn("Access denied: External drivers cannot search rides.");
@@ -484,10 +497,12 @@ const App = {
             'verification': { title: 'Student Verification', sub: 'Manage verification badges and profile parameters.' },
             'admin': { title: 'Admin Controls', sub: 'Verify students, inspect reports, and moderate complaints.' },
             'timetable': { title: 'Weekly Class Timetable', sub: 'Organize your weekly class schedule to discover matching drivers and riders.' },
-            'timetable-matches': { title: 'AI Suggested Ride Matches', sub: 'Smart recommendations to share rides with classmates going your way.' }
+            'timetable-matches': { title: 'AI Suggested Ride Matches', sub: 'Smart recommendations to share rides with classmates going your way.' },
+            'copilot': { title: 'Campus Mobility AI Copilot', sub: 'Smart recommendations, carbon offset reporting, and safety indices.' },
+            'admin-copilot': { title: 'Mobility AI Copilot SaaS Dashboard', sub: 'Universities analytics tool for campus ride-sharing optimization and safety summaries.' }
         };
 
-        const config = headers[viewName] || { title: 'CampusRide', sub: '' };
+        const config = headers[viewName] || { title: 'CampusRide AI', sub: '' };
         document.getElementById('headerTitle').innerText = config.title;
         document.getElementById('headerSubtitle').innerText = config.sub;
 
@@ -501,7 +516,7 @@ const App = {
         });
 
         // Hide all views, display active
-        const subviews = ['dashboard', 'search', 'create', 'bookings', 'timetable', 'timetable-matches', 'chat', 'verification', 'admin'];
+        const subviews = ['dashboard', 'search', 'create', 'bookings', 'timetable', 'timetable-matches', 'chat', 'verification', 'admin', 'copilot', 'admin-copilot'];
 
         subviews.forEach(v => {
             const el = document.getElementById(`view-${v}`);
@@ -529,6 +544,10 @@ const App = {
             this.loadAdminPage();
         } else if (viewName === 'timetable') {
             this.loadTimetablePage();
+        } else if (viewName === 'copilot') {
+            this.loadCopilotPage();
+        } else if (viewName === 'admin-copilot') {
+            this.loadAdminCopilotPage();
         }
     },
 
@@ -2439,12 +2458,12 @@ const App = {
                 this.renderNotificationsDropdown();
                 
                 // If there are unread notifications, mark them as read
-                const hasUnread = this.notifications.some(n => !n.is_read);
+                const hasUnread = this.notifications && this.notifications.some(n => !n.is_read);
                 if (hasUnread) {
                     await API.markNotificationsRead();
                     const badge = document.getElementById('notiBadge');
                     if (badge) badge.style.display = 'none';
-                    this.notifications.forEach(n => n.is_read = true);
+                    if (this.notifications) this.notifications.forEach(n => n.is_read = true);
                 }
             }
         });
@@ -2466,7 +2485,7 @@ const App = {
                 await API.markNotificationsRead();
                 const badge = document.getElementById('notiBadge');
                 if (badge) badge.style.display = 'none';
-                this.notifications.forEach(n => n.is_read = true);
+                if (this.notifications) this.notifications.forEach(n => n.is_read = true);
                 this.renderNotificationsDropdown();
             });
         }
@@ -3447,6 +3466,263 @@ const App = {
         }
     },
 
+    async loadCopilotPage() {
+        const blocker = document.getElementById('studentCopilotBlocker');
+        const content = document.getElementById('studentCopilotContent');
+        if (!blocker || !content) return;
+
+        if (this.currentUser.role !== 'student' || this.currentUser.verification_status !== 'verified') {
+            blocker.style.display = 'block';
+            content.style.display = 'none';
+            return;
+        }
+
+        blocker.style.display = 'none';
+        content.style.display = 'block';
+
+        // Fetch savings and insights
+        const savingsRes = await API.getStudentCopilotSavings();
+        if (savingsRes.data && !savingsRes.error) {
+            document.getElementById('copilotMoneySaved').innerText = `Rs. ${savingsRes.data.total_money_saved_rs}`;
+            document.getElementById('copilotCarbonSaved').innerText = `${savingsRes.data.total_co2_saved_kg} kg`;
+            document.getElementById('copilotRidesCompleted').innerText = savingsRes.data.completed_rides;
+
+            const insightsNode = document.getElementById('copilotInsightsNode');
+            if (insightsNode) {
+                insightsNode.innerHTML = '';
+                savingsRes.data.insights.forEach(ins => {
+                    let icon = 'ri-lightbulb-line';
+                    let colorClass = 'primary';
+                    if (ins.insight_type === 'safety') {
+                        icon = 'ri-shield-check-line';
+                        colorClass = 'accent';
+                    } else if (ins.insight_type === 'sustainability') {
+                        icon = 'ri-leaf-line';
+                        colorClass = 'success';
+                    }
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    card.style = 'background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 14px; margin-bottom: 8px; border-radius: var(--radius-sm);';
+                    card.innerHTML = `
+                        <div style="display: flex; gap: 10px; align-items: start;">
+                            <div class="stat-icon ${colorClass}" style="min-width: 36px; height: 36px; font-size: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center;"><i class="${icon}"></i></div>
+                            <div style="flex: 1;">
+                                <h4 style="font-family: var(--font-heading); font-weight: 700; margin: 0 0 4px 0; font-size: 13px;">${ins.title}</h4>
+                                <p style="font-size: 12px; color: var(--text-muted); line-height: 1.4; margin: 0;">${ins.message}</p>
+                            </div>
+                        </div>
+                    `;
+                    insightsNode.appendChild(card);
+                });
+            }
+        }
+
+        // Fetch suggestions and clusters
+        const suggRes = await API.getStudentCopilotSuggestions();
+        if (suggRes.data && !suggRes.error) {
+            const suggestionsNode = document.getElementById('copilotSuggestionsList');
+            if (suggestionsNode) {
+                suggestionsNode.innerHTML = '';
+                if (!suggRes.data.suggestions || suggRes.data.suggestions.length === 0) {
+                    suggestionsNode.innerHTML = '<div style="padding: 20px; color: var(--text-muted); text-align: center; font-size: 12px;">No ride suggestions available right now.</div>';
+                } else {
+                    suggRes.data.suggestions.forEach(sug => {
+                        const card = document.createElement('div');
+                        card.className = 'ride-card';
+                        card.style = 'margin-bottom: 12px;';
+                        card.innerHTML = `
+                            <div class="ride-card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                                <div class="ride-card-driver" style="display: flex; align-items: center; gap: 8px;">
+                                    <img src="/static/images/default-avatar.png" class="driver-mini-avatar" style="width:32px; height:32px; border-radius: 50%;"/>
+                                    <div class="driver-name-rating" style="display: flex; flex-direction: column;">
+                                        <span class="driver-name" style="font-size: 13px; font-weight: 600;">@${sug.driver_name}</span>
+                                        <span class="driver-rating" style="font-size: 11px; color: var(--text-muted);">⭐ ${sug.driver_rating.toFixed(1)}</span>
+                                    </div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: var(--primary); font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: bold;">${sug.match_score}% Match</span>
+                                </div>
+                            </div>
+                            <div class="route-timeline" style="margin: 12px 0; display: flex; flex-direction: column; gap: 4px;">
+                                <div style="font-size: 12px; display: flex; gap: 6px;"><span>📍</span> <span><b>From:</b> ${sug.pickup}</span></div>
+                                <div style="font-size: 12px; display: flex; gap: 6px;"><span>🎯</span> <span><b>To:</b> ${sug.dropoff}</span></div>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 10px; margin-top: 10px; font-size: 11px; color: var(--text-muted);">
+                                <div>🕒 Dept: <b style="color: white;">${sug.departure_time}</b></div>
+                                <div>⏱️ Est: <b style="color: white;">${sug.estimated_travel_time} mins</b></div>
+                                <div style="color: white; font-weight: bold;">Rs. ${sug.price}</div>
+                            </div>
+                            <div style="display: flex; gap: 8px; margin-top: 12px;">
+                                <button class="btn btn-secondary btn-sm" style="flex: 1; font-size: 11px; padding: 6px 12px;" onclick="window.viewCopilotMatchReason(${sug.ride_id})">View Why</button>
+                                <button class="btn btn-secondary btn-sm" style="flex: 1; font-size: 11px; padding: 6px 12px;" onclick="window.viewCopilotSafetyDetails(${sug.ride_id})">Safety: ${sug.safety_score}%</button>
+                                <button class="btn btn-primary btn-sm" style="flex: 1.2; font-size: 11px; padding: 6px 12px;" onclick="window.showRideDetailFromMap(${sug.ride_id})">Book Ride</button>
+                            </div>
+                        `;
+                        suggestionsNode.appendChild(card);
+                    });
+                }
+            }
+
+            const clustersNode = document.getElementById('copilotClustersList');
+            if (clustersNode) {
+                clustersNode.innerHTML = '';
+                if (!suggRes.data.route_clusters || suggRes.data.route_clusters.length === 0) {
+                    clustersNode.innerHTML = '<div style="padding: 20px; color: var(--text-muted); text-align: center; font-size: 12px;">No classmate travel clusters detected today. Add more classes to your timetable!</div>';
+                } else {
+                    suggRes.data.route_clusters.forEach(c => {
+                        const card = document.createElement('div');
+                        card.className = 'card';
+                        card.style = 'border: 1px dashed var(--primary); background: rgba(99, 102, 241, 0.03); padding: 14px; border-radius: var(--radius-sm); margin-bottom: 8px;';
+                        
+                        const clusterEscaped = JSON.stringify(c).replace(/"/g, '&quot;');
+                        
+                        card.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                <span style="font-weight: bold; font-size: 13px; color: var(--primary);">${c.route_key}</span>
+                                <span style="font-size: 11px; color: var(--text-muted);">${c.day} • ${c.time_window}</span>
+                            </div>
+                            <p style="font-size: 12px; margin: 0 0 8px 0; line-height: 1.4;">${c.recommendation}</p>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">
+                                <b>Classmates:</b> ${c.students.map(u => '@' + u).join(', ')}
+                            </div>
+                            <button class="btn btn-secondary btn-sm" style="width: 100%; font-size: 11px; padding: 6px;" onclick="window.createRideFromCluster(${clusterEscaped})">Create Ride for this Cluster</button>
+                        `;
+                        clustersNode.appendChild(card);
+                    });
+                }
+            }
+        }
+    },
+
+    async loadAdminCopilotPage() {
+        const [overviewRes, predictionRes, peakRes, safetyRes, sustainabilityRes] = await Promise.all([
+            API.getAdminCopilotOverview(),
+            API.getAdminCopilotDemandPrediction(),
+            API.getAdminCopilotPeakHours(),
+            API.getAdminCopilotSafetySummary(),
+            API.getAdminCopilotSustainabilityReport()
+        ]);
+
+        if (overviewRes.data && !overviewRes.error) {
+            const overview = overviewRes.data.overview;
+            const activeRides = document.getElementById('admCopilotActiveRides');
+            if (activeRides) activeRides.innerText = overview.active_rides_today;
+            
+            const carbonSaved = document.getElementById('admCopilotCarbonSaved');
+            if (carbonSaved) carbonSaved.innerText = `${overview.co2_saved_kg} kg`;
+        }
+
+        if (safetyRes.data && !safetyRes.error) {
+            const driverRatio = document.getElementById('admCopilotDriverRatio');
+            if (driverRatio) driverRatio.innerText = `${safetyRes.data.verified_driver_ratio}%`;
+        }
+
+        if (sustainabilityRes.data && !sustainabilityRes.error) {
+            const sustNode = document.getElementById('admSustainabilityReportNode');
+            if (sustNode) {
+                const sustData = sustainabilityRes.data;
+                sustNode.innerHTML = `
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px;">
+                        <div style="color: var(--text-muted); font-size: 11px;">Total CO2 Saved</div>
+                        <div style="font-size: 18px; font-weight: bold; color: #10b981; margin-top: 4px;">${sustData.total_co2_saved_kg} kg CO2</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Equivalent to planting ${sustData.trees_equivalent} trees</div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--border-color); padding: 12px; border-radius: 6px;">
+                        <div style="color: var(--text-muted); font-size: 11px;">Shared Travel Kilometers</div>
+                        <div style="font-size: 18px; font-weight: bold; color: var(--primary); margin-top: 4px;">${sustData.passenger_km_shared} km</div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Single-occupant km avoided: ${sustData.single_occupancy_miles_avoided} km</div>
+                    </div>
+                `;
+            }
+        }
+
+        if (predictionRes.data && !predictionRes.error) {
+            const predNode = document.getElementById('admDemandPredictionListNode');
+            if (predNode) {
+                predNode.innerHTML = '';
+                if (!predictionRes.data.predictions || predictionRes.data.predictions.length === 0) {
+                    predNode.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-size: 12px;">No prediction records.</div>';
+                } else {
+                    predictionRes.data.predictions.forEach(p => {
+                        let badgeColor = 'rgba(239, 68, 68, 0.15)';
+                        let textColor = '#ef4444';
+                        if (p.demand_level === 'Low') {
+                            badgeColor = 'rgba(59, 130, 246, 0.15)';
+                            textColor = '#3b82f6';
+                        } else if (p.demand_level === 'Medium') {
+                            badgeColor = 'rgba(245, 158, 11, 0.15)';
+                            textColor = '#f59e0b';
+                        }
+                        const item = document.createElement('div');
+                        item.style = 'display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 8px 0; font-size: 12px;';
+                        item.innerHTML = `
+                            <div style="flex: 1; min-width: 0; padding-right: 10px;">
+                                <div style="font-weight: bold; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; color: white;">${p.route}</div>
+                                <div style="font-size: 10px; color: var(--text-muted);">${p.day_of_week} • ${p.time_slot} • 🌤️ ${p.weather_condition}</div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size:10px; color: var(--text-muted);">${p.confidence}% conf</span>
+                                <span class="badge" style="background: ${badgeColor}; color: ${textColor}; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${p.demand_level}</span>
+                            </div>
+                        `;
+                        predNode.appendChild(item);
+                    });
+                }
+            }
+        }
+
+        if (peakRes.data && !peakRes.error) {
+            const chartNode = document.getElementById('admPeakHoursChartNode');
+            if (chartNode) {
+                chartNode.innerHTML = '';
+                if (!peakRes.data.peak_hours || peakRes.data.peak_hours.length === 0) {
+                    chartNode.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-size: 12px;">No peak hour metrics.</div>';
+                } else {
+                    const maxCount = Math.max(...peakRes.data.peak_hours.map(h => h.rides_count), 1);
+                    peakRes.data.peak_hours.slice(0, 5).forEach(h => {
+                        const pct = (h.rides_count / maxCount) * 100;
+                        const bar = document.createElement('div');
+                        bar.style = 'margin-bottom: 8px; font-size: 12px;';
+                        bar.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>${h.time_slot}</span>
+                                <span style="font-weight: bold; color: white;">${h.rides_count} rides</span>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.05); height: 8px; border-radius: 4px; overflow: hidden;">
+                                <div style="background: var(--primary); height: 100%; width: ${pct}%; border-radius: 4px; transition: width 0.5s ease-out;"></div>
+                            </div>
+                        `;
+                        chartNode.appendChild(bar);
+                    });
+                }
+            }
+        }
+
+        if (overviewRes.data && !overviewRes.error) {
+            const routesNode = document.getElementById('admHeatmapListNode');
+            if (routesNode) {
+                routesNode.innerHTML = '';
+                const popRoutes = overviewRes.data.overview.popular_routes;
+                if (!popRoutes || popRoutes.length === 0) {
+                    routesNode.innerHTML = '<div style="color: var(--text-muted); text-align: center; font-size: 12px;">No route metrics.</div>';
+                } else {
+                    popRoutes.forEach(r => {
+                        const item = document.createElement('div');
+                        item.style = 'border-bottom: 1px solid var(--border-color); padding: 8px 0; font-size: 12px;';
+                        item.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 2px;">
+                                <span style="color: white;">${r.pickup} ➔ ${r.dropoff}</span>
+                                <span style="color: var(--primary);">${r.count} rides</span>
+                            </div>
+                            <div style="font-size: 10px; color: var(--text-muted);">Hotspot demand level: High</div>
+                        `;
+                        routesNode.appendChild(item);
+                    });
+                }
+            }
+        }
+    },
+
     showToast(message, type = "info") {
         const stack = document.getElementById('toastStackNode');
         if (!stack) return;
@@ -3476,6 +3752,100 @@ const App = {
 window.App = App;
 
 // Global helper accessors for inline element triggers
+window.viewCopilotMatchReason = async function(rideId) {
+    const res = await API.getStudentCopilotRideMatch(rideId);
+    if (res.data && !res.error) {
+        const body = document.getElementById('copilotRecommendationBody');
+        body.innerHTML = `
+            <div style="text-align: center; margin-bottom: 16px;">
+                <div style="font-size: 40px; color: var(--primary); font-weight: bold; margin-bottom: 4px;">${res.data.match_score}%</div>
+                <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Route Match Score</div>
+            </div>
+            <p style="margin-bottom: 12px; line-height: 1.5;">${res.data.explanation}</p>
+            <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Estimated Money Saved:</span>
+                    <span style="font-weight: bold; color: var(--secondary);">Rs. ${res.data.cost_saving}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Estimated Carbon Offset:</span>
+                    <span style="font-weight: bold; color: #10b981;">${res.data.carbon_saving} kg CO2</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Recommended Departure:</span>
+                    <span style="font-weight: bold; color: white;">${res.data.recommended_departure_time}</span>
+                </div>
+            </div>
+        `;
+        document.getElementById('copilotRecommendationModal').style.display = 'flex';
+    }
+};
+
+window.viewCopilotSafetyDetails = async function(rideId) {
+    const res = await API.getStudentCopilotSafetyScore(rideId);
+    if (res.data && !res.error) {
+        const body = document.getElementById('copilotSafetyBody');
+        let color = '#ef4444';
+        if (res.data.safety_score >= 90) color = '#10b981';
+        else if (res.data.safety_score >= 75) color = '#3b82f6';
+        else if (res.data.safety_score >= 50) color = '#f59e0b';
+        
+        let reasonsList = '';
+        res.data.reasons.forEach(r => {
+            reasonsList += `<li style="margin-bottom: 6px; position: relative; padding-left: 14px;">
+                <span style="position: absolute; left: 0; color: ${color};">•</span> ${r}
+            </li>`;
+        });
+
+        body.innerHTML = `
+            <div style="text-align: center; margin-bottom: 16px;">
+                <div style="font-size: 40px; color: ${color}; font-weight: bold; margin-bottom: 4px;">${res.data.safety_score}/100</div>
+                <div style="font-size: 13px; font-weight: bold; color: ${color}; text-transform: uppercase; letter-spacing: 1px;">${res.data.label}</div>
+            </div>
+            <h4 style="font-family: var(--font-heading); font-weight: 700; margin-bottom: 8px;">Safety Breakdown Factors:</h4>
+            <ul style="list-style: none; padding-left: 0; line-height: 1.4; color: white;">
+                ${reasonsList}
+            </ul>
+        `;
+        document.getElementById('copilotSafetyModal').style.display = 'flex';
+    }
+};
+
+window.createRideFromCluster = function(cluster) {
+    App.showView('create');
+    document.getElementById('createPickupName').value = `Near Cluster (Lat: ${cluster.approx_pickup_lat.toFixed(4)})`;
+    document.getElementById('createPickupLat').value = cluster.approx_pickup_lat;
+    document.getElementById('createPickupLng').value = cluster.approx_pickup_lng;
+    
+    document.getElementById('createDropoffName').value = cluster.destination;
+    
+    App.showNotificationToast({
+        title: "Cluster Selected",
+        content: "Prefilled pickup location. Please select dropoff on the map and complete steps to publish.",
+        notification_type: "system"
+    });
+};
+
+window.submitAdminCopilotQuery = async function() {
+    const input = document.getElementById('copilotChatQuestionInput');
+    const question = input.value.trim();
+    if (!question) return;
+    
+    const responseArea = document.getElementById('copilotChatResponseArea');
+    responseArea.innerText = 'Analyzing campus data...';
+    input.value = '';
+    
+    const res = await API.askAdminCopilot(question);
+    if (res.data && !res.error) {
+        responseArea.innerHTML = `
+            <div style="font-weight: bold; margin-bottom: 4px; color: var(--text-muted);">Q: "${res.data.question}"</div>
+            <div style="color: white; line-height: 1.4;">${res.data.answer}</div>
+        `;
+    } else {
+        responseArea.innerHTML = `<span style="color: var(--error);">Error query processing failed.</span>`;
+    }
+};
+
 window.showRideDetailFromMap = function(rideId) {
     App.showRideDetails(rideId);
 };

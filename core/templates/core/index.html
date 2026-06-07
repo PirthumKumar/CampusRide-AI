@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CampusRide | AI-Powered Student Carpool Platform</title>
+    <title>CampusRide AI | AI-Powered Student Carpool Platform</title>
     <meta name="csrf-token" content="{{ csrf_token }}">
     
     <!-- Google Fonts -->
@@ -31,10 +31,11 @@
         <aside class="app-sidebar" id="sidebarNode" style="display: none;">
             <div class="logo-container">
                 <div class="logo-wrapper">
-                    <div class="logo-icon">
-                        <i class="ri-car-fill"></i>
+                    <div class="logo-icon" style="position: relative;">
+                        <i class="ri-car-fill" style="font-size: 20px; position: absolute; transform: translate(-4px, -4px);"></i>
+                        <i class="ri-cpu-line" style="font-size: 14px; position: absolute; color: var(--accent); transform: translate(10px, 8px); text-shadow: 0 0 8px var(--accent);"></i>
                     </div>
-                    <div class="logo-text">CampusRide</div>
+                    <div class="logo-text">CampusRide AI</div>
                 </div>
                 <button class="mobile-nav-toggle" id="mobileNavToggleBtn" aria-label="Toggle Navigation">
                     <i class="ri-menu-line"></i>
@@ -48,9 +49,11 @@
                     <li><a class="nav-item" data-view="create" id="navCreateNode"><i class="ri-add-circle-line"></i> Create a Ride</a></li>
                     <li><a class="nav-item" data-view="bookings" id="navBookingsNode"><i class="ri-calendar-todo-line"></i> My Bookings</a></li>
                     <li><a class="nav-item" data-view="timetable" id="navTimetableNode"><i class="ri-calendar-2-line"></i> Class Timetable</a></li>
+                    <li><a class="nav-item" data-view="copilot" id="navCopilotNode"><i class="ri-robot-2-line"></i> AI Copilot</a></li>
                     <li><a class="nav-item" data-view="chat" id="navChatNode"><i class="ri-message-3-line"></i> Inbox</a></li>
                     <li><a class="nav-item" data-view="verification" id="navVerificationNode"><i class="ri-shield-user-line"></i> ID Verification</a></li>
                     <li id="adminNavNode" style="display: none;"><a class="nav-item" data-view="admin"><i class="ri-admin-line"></i> Admin Panel</a></li>
+                    <li id="adminCopilotNavNode" style="display: none;"><a class="nav-item" data-view="admin-copilot" id="navAdminCopilotNode"><i class="ri-ai-generate"></i> Mobility AI Copilot</a></li>
                 </ul>
 
             </nav>
@@ -75,7 +78,7 @@
             <header class="content-header" id="headerNode" style="display: none;">
                 <div class="header-title-group">
                     <h1 id="headerTitle">Dashboard</h1>
-                    <p id="headerSubtitle">Welcome back to CampusRide!</p>
+                    <p id="headerSubtitle">Welcome back to CampusRide AI!</p>
                 </div>
                 <div class="header-actions">
                     <!-- Notification bell with wrapper -->
@@ -107,10 +110,11 @@
             <div id="view-guest" class="auth-page">
                 <div class="card auth-card">
                     <div class="auth-header">
-                        <div class="logo-icon auth-logo">
-                            <i class="ri-car-fill"></i>
+                        <div class="logo-icon auth-logo" style="position: relative;">
+                            <i class="ri-car-fill" style="font-size: 20px; position: absolute; transform: translate(-4px, -4px);"></i>
+                            <i class="ri-cpu-line" style="font-size: 14px; position: absolute; color: var(--accent); transform: translate(10px, 8px); text-shadow: 0 0 8px var(--accent);"></i>
                         </div>
-                        <h2>CampusRide Login</h2>
+                        <h2>CampusRide AI Login</h2>
                         <p>AI-Powered Student Carpool Platform</p>
                     </div>
                     
@@ -869,6 +873,212 @@
                     <h3 style="font-family: var(--font-heading); margin-bottom: 20px;"><i class="ri-alarm-warning-line" style="color: var(--error);"></i> Active SOS Emergency Alerts</h3>
                     <div class="admin-reports-grid" id="adminSOSNode">
                         <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 8A. STUDENT AI COPILOT SCREEN -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-copilot" class="copilot-section" style="display: none;">
+                <!-- Blocker for unverified students -->
+                <div id="studentCopilotBlocker" style="display: none; text-align: center; padding: 40px 20px;">
+                    <div style="font-size: 64px; color: var(--error); margin-bottom: 20px;">
+                        <i class="ri-robot-2-line"></i>
+                    </div>
+                    <h3 style="font-family: var(--font-heading); font-weight: 700; margin-bottom: 12px;">Verification Required</h3>
+                    <p style="color: var(--text-muted); font-size: 14px; max-width: 500px; margin: 0 auto 24px auto;">
+                        Campus Mobility AI Copilot is exclusive to verified students. Complete your profile verification to access personalized ride matching, safety scores, and carbon savings analytics.
+                    </p>
+                    <button class="btn btn-primary" onclick="App.showView('verification')">Verify My Identity</button>
+                </div>
+
+                <div id="studentCopilotContent">
+                    <div style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                        <h2 style="font-family: var(--font-heading); font-weight: 800; display: flex; align-items: center; gap: 10px;">
+                            <i class="ri-robot-2-line" style="color: var(--primary);"></i> Campus Mobility AI Copilot
+                        </h2>
+                        <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Smart ride recommendations, cost allocations, safety indices, and carbon offset reporting.</p>
+                    </div>
+
+                    <div class="grid-cols-3" style="margin-bottom: 24px; gap: 20px;">
+                        <!-- Savings Stats -->
+                        <div class="card stat-card">
+                            <div class="stat-icon accent"><i class="ri-money-dollar-circle-line"></i></div>
+                            <div>
+                                <div class="stat-value" id="copilotMoneySaved">Rs. 0</div>
+                                <div class="stat-label">Estimated Money Saved</div>
+                            </div>
+                        </div>
+                        <div class="card stat-card">
+                            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;"><i class="ri-leaf-line"></i></div>
+                            <div>
+                                <div class="stat-value" id="copilotCarbonSaved">0.0 kg</div>
+                                <div class="stat-label">CO2 Carbon Offset</div>
+                            </div>
+                        </div>
+                        <div class="card stat-card">
+                            <div class="stat-icon primary"><i class="ri-calendar-check-line"></i></div>
+                            <div>
+                                <div class="stat-value" id="copilotRidesCompleted">0</div>
+                                <div class="stat-label">Shared Rides Taken</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="search-results-section" style="margin-bottom: 24px;">
+                        <!-- Left column: Suggested rides & clusters -->
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <div class="card">
+                                <h3 style="font-family: var(--font-heading); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                                    <i class="ri-magic-line" style="color: var(--secondary);"></i> Top AI Recommendations
+                                </h3>
+                                <div id="copilotSuggestionsList" class="rides-list" style="max-height: 450px;">
+                                    <!-- Suggestions loaded dynamically -->
+                                </div>
+                            </div>
+
+                            <div class="card">
+                                <h3 style="font-family: var(--font-heading); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                                    <i class="ri-group-line" style="color: var(--primary);"></i> Smart Ride Clustering
+                                </h3>
+                                <div id="copilotClustersList" style="display: flex; flex-direction: column; gap: 12px;">
+                                    <!-- Clustered users lists -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right column: Copilot insights -->
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <div class="card">
+                                <h3 style="font-family: var(--font-heading); margin-bottom: 16px;"><i class="ri-lightbulb-line" style="color: #f59e0b;"></i> Copilot Insight Cards</h3>
+                                <div id="copilotInsightsNode" style="display: flex; flex-direction: column; gap: 12px;">
+                                    <!-- Insights loaded dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---------------------------------------------------- -->
+            <!-- 8B. ADMIN MOBILITY AI COPILOT SAAS DASHBOARD -->
+            <!-- ---------------------------------------------------- -->
+            <div id="view-admin-copilot" class="admin-copilot-section" style="display: none;">
+                <div style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+                    <h2 style="font-family: var(--font-heading); font-weight: 800; display: flex; align-items: center; gap: 10px;">
+                        <i class="ri-ai-generate" style="color: var(--secondary);"></i> Mobility AI Copilot SaaS Dashboard
+                    </h2>
+                    <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">Universities analytics tool for campus ride-sharing optimization, safety summaries, and predictive scheduling.</p>
+                </div>
+
+                <!-- Admin Metrics -->
+                <div class="grid-cols-3" style="margin-bottom: 24px; gap: 20px;">
+                    <div class="card stat-card">
+                        <div class="stat-icon primary"><i class="ri-steering-line"></i></div>
+                        <div>
+                            <div class="stat-value" id="admCopilotActiveRides">0</div>
+                            <div class="stat-label">Active Rides Today</div>
+                        </div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-icon accent"><i class="ri-shield-check-line"></i></div>
+                        <div>
+                            <div class="stat-value" id="admCopilotDriverRatio">100%</div>
+                            <div class="stat-label">Verified Driver Ratio</div>
+                        </div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: #10b981;"><i class="ri-global-line"></i></div>
+                        <div>
+                            <div class="stat-value" id="admCopilotCarbonSaved">0.0 kg</div>
+                            <div class="stat-label">Total CO2 Saved</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-cols-2" style="margin-bottom: 24px; gap: 24px;">
+                    <!-- Demand Prediction & Peak Hours -->
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <div class="card">
+                            <h3 style="font-family: var(--font-heading); margin-bottom: 16px;"><i class="ri-line-chart-line" style="color: var(--secondary);"></i> AI Next-Day Demand Prediction</h3>
+                            <div id="admDemandPredictionListNode" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px;">
+                                <!-- Predictions loaded dynamically -->
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <h3 style="font-family: var(--font-heading); margin-bottom: 16px;"><i class="ri-time-line"></i> Peak Travel Hours</h3>
+                            <div id="admPeakHoursChartNode" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Peak hours bars loaded dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Routes Heatmap & Chat Copilot -->
+                    <div style="display: flex; flex-direction: column; gap: 24px;">
+                        <div class="card">
+                            <h3 style="font-family: var(--font-heading); margin-bottom: 16px;"><i class="ri-road-map-line" style="color: var(--primary);"></i> Popular Routes & Heatmap Locations</h3>
+                            <div id="admHeatmapListNode" style="display: flex; flex-direction: column; gap: 10px; max-height: 220px; overflow-y: auto;">
+                                <!-- Routes loaded dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Chat Copilot Widget -->
+                        <div class="card">
+                            <h3 style="font-family: var(--font-heading); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                                <i class="ri-chat-voice-line" style="color: var(--accent);"></i> Natural Language Copilot Chat
+                            </h3>
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                <div id="copilotChatResponseArea" style="min-height: 80px; background: rgba(0,0,0,0.15); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; font-size: 12px; line-height: 1.5; color: var(--text-main);">
+                                    Ask me: "What are the busiest routes today?", "How much CO2 did students save?", "Any safety issues?" or "Which area needs more drivers?".
+                                </div>
+                                <div style="display: flex; gap: 6px;">
+                                    <input type="text" class="form-input" id="copilotChatQuestionInput" placeholder="Type a mobility query..." style="margin-bottom:0; font-size: 13px;" onkeydown="if(event.key==='Enter') window.submitAdminCopilotQuery()"/>
+                                    <button class="btn btn-primary btn-sm" onclick="window.submitAdminCopilotQuery()"><i class="ri-send-plane-line"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sustainability & Safety Metrics -->
+                <div class="card" style="margin-bottom: 24px;">
+                    <h3 style="font-family: var(--font-heading); margin-bottom: 16px;"><i class="ri-leaf-line" style="color: #10b981;"></i> Campus Sustainability & Savings Report</h3>
+                    <div class="grid-cols-2" id="admSustainabilityReportNode" style="gap: 20px; font-size: 13px;">
+                        <!-- Sustainability data loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL WHY RECOMMENDED (EXPLAIN RIDE RECOMMENDATION) -->
+            <div class="modal-overlay" id="copilotRecommendationModal" style="display: none;">
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3 style="font-family: var(--font-heading); font-weight: 800;">AI Suggestion Explanation</h3>
+                        <button style="background: transparent; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" onclick="document.getElementById('copilotRecommendationModal').style.display='none'">&times;</button>
+                    </div>
+                    <div class="modal-body" id="copilotRecommendationBody" style="font-size: 13px; line-height: 1.6; color: var(--text-main);">
+                        <!-- Loaded dynamically -->
+                    </div>
+                    <div class="modal-footer" style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
+                        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('copilotRecommendationModal').style.display='none'">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODAL WHY SAFE (EXPLAIN SAFETY SCORE) -->
+            <div class="modal-overlay" id="copilotSafetyModal" style="display: none;">
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h3 style="font-family: var(--font-heading); font-weight: 800;">AI Safety Score Breakdown</h3>
+                        <button style="background: transparent; border: none; font-size: 24px; color: var(--text-muted); cursor: pointer;" onclick="document.getElementById('copilotSafetyModal').style.display='none'">&times;</button>
+                    </div>
+                    <div class="modal-body" id="copilotSafetyBody" style="font-size: 13px; line-height: 1.6; color: var(--text-main);">
+                        <!-- Loaded dynamically -->
+                    </div>
+                    <div class="modal-footer" style="text-align: right; border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
+                        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('copilotSafetyModal').style.display='none'">Close</button>
                     </div>
                 </div>
             </div>

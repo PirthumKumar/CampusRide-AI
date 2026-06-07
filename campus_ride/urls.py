@@ -70,5 +70,19 @@ urlpatterns = [
     path('api/safety/users/<int:pk>/moderate/', views.moderate_user_admin, name='api_moderate_user_admin'),
     path('api/safety/sos/admin_list/', views.admin_sos_list, name='api_admin_sos_list'),
     path('api/safety/sos/<int:pk>/resolve/', views.resolve_sos_admin, name='api_resolve_sos_admin'),
+
+    # Campus Mobility AI Copilot API Endpoints
+    path('api/copilot/student/suggestions/', views.copilot_student_suggestions, name='api_copilot_student_suggestions'),
+    path('api/copilot/student/ride-match/<int:ride_id>/', views.copilot_student_ride_match, name='api_copilot_student_ride_match'),
+    path('api/copilot/student/safety-score/<int:ride_id>/', views.copilot_student_safety_score, name='api_copilot_student_safety_score'),
+    path('api/copilot/student/savings/', views.copilot_student_savings, name='api_copilot_student_savings'),
+
+    path('api/copilot/admin/overview/', views.copilot_admin_overview, name='api_copilot_admin_overview'),
+    path('api/copilot/admin/demand-prediction/', views.copilot_admin_demand_prediction, name='api_copilot_admin_demand_prediction'),
+    path('api/copilot/admin/heatmap/', views.copilot_admin_heatmap, name='api_copilot_admin_heatmap'),
+    path('api/copilot/admin/peak-hours/', views.copilot_admin_peak_hours, name='api_copilot_admin_peak_hours'),
+    path('api/copilot/admin/safety-summary/', views.copilot_admin_safety_summary, name='api_copilot_admin_safety_summary'),
+    path('api/copilot/admin/sustainability-report/', views.copilot_admin_sustainability_report, name='api_copilot_admin_sustainability_report'),
+    path('api/copilot/admin/ask/', views.copilot_admin_ask, name='api_copilot_admin_ask'),
 ]
 

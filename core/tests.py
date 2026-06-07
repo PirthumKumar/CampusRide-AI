@@ -721,6 +721,135 @@ class TimetableMatchingTests(TestCase):
         self.assertEqual(created_ride.price_per_seat, 120.00)
 
 
+class CampusMobilityAICopilotTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.User = get_user_model()
+        from django.utils import timezone
+        
+        # Create users
+        self.admin = self.User.objects.create_user(username="admin_user", email="admin@test.com", password="password123", role="admin", is_staff=True, verification_status="verified")
+        self.student_verified = self.User.objects.create_user(username="std_verified", email="std_v@test.com", password="password123", role="student", verification_status="verified")
+        self.student_unverified = self.User.objects.create_user(username="std_unverified", email="std_uv@test.com", password="password123", role="student", verification_status="unverified")
+        
+        # Create a ride
+        from .models import Ride, Timetable, RideAnalytics
+        self.ride = Ride.objects.create(
+            driver=self.admin,
+            pickup_name="H-12 Hostel", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="NUST SEECS", dropoff_lat=33.6402, dropoff_lng=72.9860,
+            date=date.today(), time=time(8, 15), price_per_seat=150.0, vehicle_model="Civic", vehicle_plate="LE-123",
+            seats_total=4, seats_available=2
+        )
+        
+        # Create timetable entry
+        self.tt = Timetable.objects.create(
+            student=self.student_verified,
+            course_name="Machine Learning",
+            day_of_week=date.today().strftime('%A'),
+            class_start_time=time(9, 0),
+            class_end_time=time(10, 30),
+            pickup_name="H-12 Hostel", pickup_lat=33.6428, pickup_lng=72.9904,
+            dropoff_name="NUST SEECS", dropoff_lat=33.6402, dropoff_lng=72.9860,
+            preferred_departure_time=time(8, 30)
+        )
+        
+        # Create RideAnalytics
+        self.analytics = RideAnalytics.objects.create(
+            ride_id=self.ride.id,
+            route="H-12 Hostel -> NUST SEECS",
+            pickup_location="H-12 Hostel",
+            dropoff_location="NUST SEECS",
+            departure_time=timezone.now(),
+            distance=2.5,
+            duration=10.0,
+            shared_seats=2,
+            estimated_co2_saved=0.75,
+            estimated_money_saved=250.0
+        )
+
+    def test_algorithms(self):
+        # 1. Match score
+        from .copilot import calculate_ride_match_score, calculate_student_cost_saving, calculate_carbon_saving, calculate_ride_safety_score, get_safety_label
+        score = calculate_ride_match_score(self.student_verified, self.ride)
+        self.assertTrue(score >= 25)
+        
+        # 2. Savings
+        money_saved = calculate_student_cost_saving(self.student_verified, self.ride)
+        self.assertTrue(money_saved > 0)
+        
+        co2_saved = calculate_carbon_saving(self.ride)
+        self.assertTrue(co2_saved > 0)
+        
+        # 3. Safety score
+        safety_score = calculate_ride_safety_score(self.ride)
+        self.assertTrue(0 <= safety_score <= 100)
+        label = get_safety_label(safety_score)
+        self.assertIn(label, ["Excellent Safety", "Good Safety", "Medium Safety", "Needs Review"])
+
+    def test_student_endpoints(self):
+        # Unverified blocked / empty suggestions list
+        self.client.force_authenticate(user=self.student_unverified)
+        response = self.client.get("/api/copilot/student/suggestions/")
+        self.assertEqual(len(response.data.get("suggestions", [])), 0)
+        
+        # Verified allowed
+        self.client.force_authenticate(user=self.student_verified)
+        response = self.client.get("/api/copilot/student/suggestions/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("suggestions", response.data)
+        
+        # Detailed ride match
+        response = self.client.get(f"/api/copilot/student/ride-match/{self.ride.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("match_score", response.data)
+        
+        # Safety score details
+        response = self.client.get(f"/api/copilot/student/safety-score/{self.ride.id}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("safety_score", response.data)
+        
+        # Savings total
+        response = self.client.get("/api/copilot/student/savings/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("total_money_saved_rs", response.data)
+
+    def test_admin_endpoints(self):
+        # Student user blocked
+        self.client.force_authenticate(user=self.student_verified)
+        response = self.client.get("/api/copilot/admin/overview/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+        # Admin allowed
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.get("/api/copilot/admin/overview/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        response = self.client.get("/api/copilot/admin/demand-prediction/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        response = self.client.get("/api/copilot/admin/heatmap/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        response = self.client.get("/api/copilot/admin/peak-hours/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        response = self.client.get("/api/copilot/admin/safety-summary/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        response = self.client.get("/api/copilot/admin/sustainability-report/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_chatbot_query(self):
+        self.client.force_authenticate(user=self.admin)
+        payload = {"question": "What are the busiest routes today?"}
+        response = self.client.post("/api/copilot/admin/ask/", payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("answer", response.data)
+        self.assertTrue(len(response.data["answer"]) > 0)
+
+
+
 
 
 

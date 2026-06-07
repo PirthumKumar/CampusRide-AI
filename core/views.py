@@ -10,7 +10,7 @@ from django.db.models import Q, Max
 from django.utils import timezone
 from datetime import datetime, date
 
-from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent, RideLocation, Timetable
+from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent, RideLocation, Timetable, RideAnalytics, SafetyScore, DemandPrediction, CopilotInsight
 from .serializers import (UserSerializer, UserMinSerializer, RegisterSerializer, RideSerializer, 
                             BookingSerializer, MessageSerializer, NotificationSerializer, 
                             ReviewSerializer, ReportSerializer, SOSEventSerializer, TimetableSerializer)
@@ -1053,6 +1053,30 @@ def complete_ride_view(request, pk):
     booking.verification_token = None
     booking.save()
 
+    # Log analytics to RideAnalytics
+    try:
+        from .copilot import calculate_student_cost_saving, calculate_carbon_saving
+        distance = haversine_distance(booking.ride.pickup_lat, booking.ride.pickup_lng, booking.ride.dropoff_lat, booking.ride.dropoff_lng)
+        co2 = calculate_carbon_saving(booking.ride)
+        savings = calculate_student_cost_saving(booking.passenger, booking.ride)
+        
+        departure_dt = datetime.combine(booking.ride.date, booking.ride.time)
+        
+        RideAnalytics.objects.create(
+            ride_id=booking.ride.id,
+            route=f"{booking.ride.pickup_name} -> {booking.ride.dropoff_name}",
+            pickup_location=booking.ride.pickup_name,
+            dropoff_location=booking.ride.dropoff_name,
+            departure_time=timezone.make_aware(departure_dt) if timezone.is_naive(departure_dt) else departure_dt,
+            distance=distance,
+            duration=max(5.0, distance * 2.5),
+            shared_seats=booking.seats_booked,
+            estimated_co2_saved=co2,
+            estimated_money_saved=savings
+        )
+    except Exception as analytics_err:
+        print("Failed to save ride analytics:", analytics_err)
+
     # Notify Passenger that the ride has completed
     Notification.objects.create(
         user=booking.passenger,
@@ -1355,6 +1379,242 @@ def timetable_create_recurring_ride_view(request):
     )
 
     return Response(RideSerializer(ride, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+
+# =====================================================================
+# CAMPUS MOBILITY AI COPILOT API VIEWS
+# =====================================================================
+from .copilot import (
+    get_personal_ride_suggestions, calculate_ride_match_score,
+    calculate_student_cost_saving, calculate_carbon_saving,
+    explain_ride_recommendation, calculate_ride_safety_score,
+    explain_safety_score, get_safety_label, get_campus_mobility_overview,
+    predict_ride_demand, generate_route_heatmap_data, detect_peak_travel_hours,
+    generate_sustainability_report, generate_safety_summary,
+    handle_natural_language_query, cluster_similar_ride_requests,
+    recommend_departure_time
+)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_student_suggestions(request):
+    """
+    Returns personalized ride recommendations for the current student.
+    """
+    suggestions = get_personal_ride_suggestions(request.user)
+    clusters = cluster_similar_ride_requests()
+    
+    # Filter clusters containing or related to this student
+    student_clusters = [c for c in clusters if request.user.username in c['students']]
+    
+    return Response({
+        'suggestions': suggestions,
+        'route_clusters': student_clusters
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_student_ride_match(request, ride_id):
+    """
+    Detailed route similarity, fare savings, and match score details for a specific ride.
+    """
+    try:
+        ride = Ride.objects.get(pk=ride_id)
+    except Ride.DoesNotExist:
+        return Response({'error': 'Ride not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+    score = calculate_ride_match_score(request.user, ride)
+    savings = calculate_student_cost_saving(request.user, ride)
+    co2 = calculate_carbon_saving(ride)
+    explanation = explain_ride_recommendation(request.user, ride, score)
+    
+    day_name = ride.date.strftime('%A')
+    timetable_entry = Timetable.objects.filter(student=request.user, day_of_week__iexact=day_name).first()
+    dept_time = recommend_departure_time(ride, timetable_entry)
+    
+    return Response({
+        'ride_id': ride.id,
+        'match_score': score,
+        'cost_saving': savings,
+        'carbon_saving': co2,
+        'recommended_departure_time': dept_time,
+        'explanation': explanation
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_student_safety_score(request, ride_id):
+    """
+    Returns detailed safety score breakdown and trust metrics for a ride.
+    """
+    try:
+        ride = Ride.objects.get(pk=ride_id)
+    except Ride.DoesNotExist:
+        return Response({'error': 'Ride not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+    score = calculate_ride_safety_score(ride)
+    label = get_safety_label(score)
+    reasons = explain_safety_score(score, ride)
+    
+    return Response({
+        'ride_id': ride.id,
+        'safety_score': score,
+        'label': label,
+        'reasons': reasons
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_student_savings(request):
+    """
+    Aggregated stats of carbon and money saved by the student over all completed rides.
+    """
+    bookings = Booking.objects.filter(passenger=request.user, ride_status='completed')
+    total_saved_co2 = 0.0
+    total_saved_money = 0.0
+    completed_count = bookings.count()
+    
+    for b in bookings:
+        analytics = RideAnalytics.objects.filter(ride_id=b.ride.id).first()
+        if analytics:
+            total_saved_co2 += analytics.estimated_co2_saved
+            total_saved_money += analytics.estimated_money_saved
+        else:
+            dist = haversine_distance(b.ride.pickup_lat, b.ride.pickup_lng, b.ride.dropoff_lat, b.ride.dropoff_lng)
+            total_saved_co2 += dist * 0.15 * b.seats_booked
+            total_saved_money += (300 + 50 * dist) - float(b.ride.price_per_seat)
+            
+    insights = CopilotInsight.objects.filter(user_type='student', user=request.user, is_read=False).order_by('-created_at')
+    insights_data = []
+    for ins in insights:
+        insights_data.append({
+            'id': ins.id,
+            'title': ins.title,
+            'message': ins.message,
+            'insight_type': ins.insight_type,
+            'priority': ins.priority
+        })
+        
+    if not insights_data:
+        insights_data.append({
+            'id': 0,
+            'title': "Save Money by Joining Shared Rides",
+            'message': f"You have saved Rs. {round(total_saved_money, 0)} across {completed_count} shared rides this month. Keep it up!",
+            'insight_type': 'savings',
+            'priority': 'medium'
+        })
+        
+    return Response({
+        'completed_rides': completed_count,
+        'total_co2_saved_kg': round(total_saved_co2, 1),
+        'total_money_saved_rs': round(total_saved_money, 0),
+        'insights': insights_data
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_overview(request):
+    """
+    SaaS dashboard summary for admin.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    overview = get_campus_mobility_overview()
+    from .copilot import generate_admin_insights
+    insights = generate_admin_insights()
+    
+    return Response({
+        'overview': overview,
+        'insights': insights
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_demand_prediction(request):
+    """
+    Predictions by day/time/route.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    predictions = predict_ride_demand()
+    return Response({'predictions': predictions})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_heatmap(request):
+    """
+    Coordinates and labels for the demand heatmap.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    points = generate_route_heatmap_data()
+    return Response({'heatmap_points': points})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_peak_hours(request):
+    """
+    Identifies peak hours.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    hours = detect_peak_travel_hours()
+    return Response({'peak_hours': hours})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_safety_summary(request):
+    """
+    Summarizes pending SOS alerts and complaint ratios.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    summary = generate_safety_summary()
+    return Response(summary)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_sustainability_report(request):
+    """
+    Report on carbon footprint offset and shared passenger kms.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    report = generate_sustainability_report()
+    return Response(report)
+
+
+@csrf_exempt
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def copilot_admin_ask(request):
+    """
+    Query chatbot handler for the admin SaaS copilot.
+    """
+    if not request.user.is_staff and request.user.role != 'admin':
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    question = request.data.get('question', '')
+    if not question:
+        return Response({'error': 'Question cannot be empty'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    answer = handle_natural_language_query(question)
+    return Response({'question': question, 'answer': answer})
 
 
 

@@ -290,6 +290,54 @@ const API = {
                 ...rideDetails
             })
         });
+    },
+
+    // 10. Campus Mobility AI Copilot Operations
+    async getStudentCopilotSuggestions() {
+        return this.request('/api/copilot/student/suggestions/');
+    },
+
+    async getStudentCopilotRideMatch(rideId) {
+        return this.request(`/api/copilot/student/ride-match/${rideId}/`);
+    },
+
+    async getStudentCopilotSafetyScore(rideId) {
+        return this.request(`/api/copilot/student/safety-score/${rideId}/`);
+    },
+
+    async getStudentCopilotSavings() {
+        return this.request('/api/copilot/student/savings/');
+    },
+
+    async getAdminCopilotOverview() {
+        return this.request('/api/copilot/admin/overview/');
+    },
+
+    async getAdminCopilotDemandPrediction() {
+        return this.request('/api/copilot/admin/demand-prediction/');
+    },
+
+    async getAdminCopilotHeatmap() {
+        return this.request('/api/copilot/admin/heatmap/');
+    },
+
+    async getAdminCopilotPeakHours() {
+        return this.request('/api/copilot/admin/peak-hours/');
+    },
+
+    async getAdminCopilotSafetySummary() {
+        return this.request('/api/copilot/admin/safety-summary/');
+    },
+
+    async getAdminCopilotSustainabilityReport() {
+        return this.request('/api/copilot/admin/sustainability-report/');
+    },
+
+    async askAdminCopilot(question) {
+        return this.request('/api/copilot/admin/ask/', {
+            method: 'POST',
+            body: JSON.stringify({ question })
+        });
     }
 };
 

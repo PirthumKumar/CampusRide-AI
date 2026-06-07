@@ -217,3 +217,61 @@ class Timetable(models.Model):
     def __str__(self):
         return f"{self.course_name} ({self.day_of_week}) for {self.student.username}"
 
+
+class RideAnalytics(models.Model):
+    ride_id = models.IntegerField(null=True, blank=True)
+    route = models.CharField(max_length=500)
+    pickup_location = models.CharField(max_length=200)
+    dropoff_location = models.CharField(max_length=200)
+    departure_time = models.DateTimeField()
+    completed_at = models.DateTimeField(auto_now_add=True)
+    distance = models.FloatField(default=0.0)
+    duration = models.FloatField(default=0.0)
+    shared_seats = models.IntegerField(default=0)
+    estimated_co2_saved = models.FloatField(default=0.0)
+    estimated_money_saved = models.FloatField(default=0.0)
+
+    def __str__(self):
+        return f"Analytics for Route: {self.route} (Saved: {self.estimated_co2_saved}kg CO2)"
+
+
+class SafetyScore(models.Model):
+    ride = models.ForeignKey(Ride, on_delete=models.SET_NULL, null=True, blank=True)
+    driver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='driver_safety_scores', null=True, blank=True)
+    passenger = models.ForeignKey(User, on_delete=models.CASCADE, related_name='passenger_safety_scores', null=True, blank=True)
+    score = models.IntegerField(default=100)
+    label = models.CharField(max_length=50)
+    reasons = models.TextField(blank=True, null=True)
+    calculated_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Safety Score: {self.score} ({self.label})"
+
+
+class DemandPrediction(models.Model):
+    route = models.CharField(max_length=500)
+    day_of_week = models.CharField(max_length=20)
+    time_slot = models.CharField(max_length=50)
+    demand_level = models.CharField(max_length=20)
+    predicted_rides = models.FloatField(default=0.0)
+    confidence = models.FloatField(default=0.0)
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Prediction for {self.route} on {self.day_of_week}: {self.demand_level}"
+
+
+class CopilotInsight(models.Model):
+    user_type = models.CharField(max_length=20) # 'student' or 'admin'
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    insight_type = models.CharField(max_length=50) # 'demand', 'safety', 'sustainability', 'savings', 'general'
+    priority = models.CharField(max_length=20, default='medium')
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_read = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"[{self.user_type.upper()}] {self.title}"
+
+

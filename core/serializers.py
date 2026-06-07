@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent, Timetable
+from .models import User, Ride, Booking, Message, Notification, Review, Report, BlockedUser, SOSEvent, Timetable, RideAnalytics, SafetyScore, DemandPrediction, CopilotInsight
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -158,4 +158,28 @@ class TimetableSerializer(serializers.ModelSerializer):
             student = User.objects.get(id=student_id)
             return Timetable.objects.create(student=student, **validated_data)
         return super().create(validated_data)
+
+
+class RideAnalyticsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RideAnalytics
+        fields = '__all__'
+
+
+class SafetyScoreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SafetyScore
+        fields = '__all__'
+
+
+class DemandPredictionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DemandPrediction
+        fields = '__all__'
+
+
+class CopilotInsightSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CopilotInsight
+        fields = '__all__'
 
